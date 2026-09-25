@@ -31,7 +31,7 @@ class GeoLookupService {
   // /lookup geo-locates the caller's own IP; /lookup/<ip> a specific address,
   // so both the self lookup and peer lookups stay on Lantern infrastructure
   // rather than shipping addresses to a third party.
-  static const _geoUrl = 'https://geo.getiantem.org';
+  static const _geoUrl = '';
 
   // Per-IP cache for peerLookup. Most connections are short-lived
   // liveness probes from the same handful of client IPs, so without a
@@ -42,6 +42,8 @@ class GeoLookupService {
   // don't change on human timescales, and the alternative TTL
   // bookkeeping adds complexity without changing the result.
   static final Map<String, PeerGeo> _peerCache = {};
+
+  static bool get _privateGeoConfigured => _geoUrl.isNotEmpty;
 
   /// Test-only: drop the cache. Production code does not call this.
   static void resetCacheForTest() => _peerCache.clear();
@@ -196,6 +198,7 @@ class GeoLookupService {
   /// precise Location lat/lon the geo service returns, falling back to the
   /// country centre, then the US centre on any failure.
   static Future<GlobeCoordinates> selfLookup() async {
+    if (!_privateGeoConfigured) return _isoToCoords('US');
     try {
       // The geo service answers on /lookup; the bare root 404s. Hitting the
       // root meant every donor's origin silently fell through to the US-centre
@@ -232,6 +235,7 @@ class GeoLookupService {
   /// than a third party. It's an address the local host already observes as a
   /// connection source, and the service doesn't tie lookups to the caller.
   static Future<PeerGeo> peerLookup(String ip) async {
+    if (!_privateGeoConfigured) return PeerGeo.unknown;
     // Cache hit: short-circuit before any network I/O. Also caches
     // PeerGeo.unknown so a previously-failed lookup doesn't retry on
     // every subsequent probe from the same IP.

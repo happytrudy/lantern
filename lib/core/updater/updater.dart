@@ -48,6 +48,9 @@ class Updater with UpdaterListener {
   Future<void> init() => _initialization ??= _initialize();
 
   Future<void> _initialize() async {
+    // Private builds never contact Lantern's official update endpoints.
+    return;
+    // ignore: dead_code
     if (kDebugMode || !_isSupportedPlatform) return;
 
     final flags = await _featureFlags();

@@ -10,7 +10,6 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:lantern/core/common/common.dart';
 import 'package:lantern/core/desktop/desktop_window.dart';
 import 'package:lantern/core/services/injection_container.dart';
-import 'package:lantern/core/updater/updater.dart';
 import 'package:lantern/core/utils/storage_utils.dart';
 import 'package:lantern/lantern_app.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -47,22 +46,15 @@ Future<void> main() async {
     appLogger.error("Error during app initialization", e, st);
   }
 
-  // Auto-updater is internally guarded by kDebugMode and platform checks.
+  // Private builds do not contact the official update service.
   // Do not await: Sparkle bridge calls on desktop and the Android sideload
   // update check are both deferred inside init().
   //
   // Guard the sl<Updater>() lookup: if injectServices() threw above, Updater
   // (registered at injection_container.dart:40) may not be in the registry,
   // and the synchronous lookup would throw and prevent runApp.
-  try {
-    if (sl.isRegistered<Updater>()) {
-      unawaited(sl<Updater>().init());
-    } else {
-      appLogger.warning('Updater not registered, skipping init');
-    }
-  } catch (e, st) {
-    appLogger.error('Failed to start Updater.init', e, st);
-  }
+  // Automatic updates are disabled for private builds.
+
 
   runApp(
     ProviderScope(

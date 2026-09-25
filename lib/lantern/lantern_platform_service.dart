@@ -1147,15 +1147,8 @@ class LanternPlatformService implements LanternCoreService {
 
   @override
   Future<Either<Failure, String>> featureFlag() async {
-    try {
-      final featureFlag = await _methodChannel.invokeMethod<String>(
-        'featureFlag',
-      );
-      return Right(featureFlag!);
-    } catch (e, stackTrace) {
-      appLogger.error('Error fetching feature flag', e, stackTrace);
-      return Left(e.toFailure());
-    }
+    // Private build: feature flags are local and do not contact official services.
+    return const Right('{}');
   }
 
   @override

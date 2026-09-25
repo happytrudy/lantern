@@ -169,7 +169,8 @@ class LanternFFIService implements LanternCoreService {
     try {
       appLogger.debug('Setting up radiance');
       int consent = 0;
-      final env = await radianceEnvironment();
+      const env = ''; // private build: no official Radiance environment
+
       try {
         // Telemetry consent can be forwarded here when needed.
       } catch (_) {
@@ -1466,16 +1467,8 @@ class LanternFFIService implements LanternCoreService {
 
   @override
   Future<Either<Failure, String>> featureFlag() async {
-    try {
-      final result = await runInBackground<String>(() async {
-        return _ffiService.availableFeatures().toDartString();
-      });
-      checkAPIError(result);
-      return Right(result);
-    } catch (e, stackTrace) {
-      appLogger.error('Error getting feature flag', e, stackTrace);
-      return Left(e.toFailure());
-    }
+    // Private build: feature flags are local and do not contact official services.
+    return const Right('{}');
   }
 
   @override

@@ -73,7 +73,7 @@ class AndroidSideloadUpdater {
   static const _lastStartupCheckAtKey =
       'android_sideload_update_last_startup_check_at';
 
-  final Uri endpoint = Uri.parse(AppUrls.androidSideloadUpdateEndpoint);
+  final Uri endpoint = Uri.parse('about:blank');
   final http.Client? _httpClient;
   final AndroidSideloadInstaller _installer;
 
