@@ -18,6 +18,7 @@ import 'package:lantern/features/action_mode/provider/share_notifier.dart';
 import 'package:lantern/features/action_mode/provider/action_mode_tab_visible_notifier.dart';
 import 'package:lantern/features/action_mode/action_mode.dart';
 import 'package:lantern/features/vpn/provider/available_servers_notifier.dart';
+import 'package:lantern/features/vpn/provider/server_location_notifier.dart';
 import 'package:lantern/features/vpn/provider/vpn_notifier.dart';
 
 import '../../core/common/common.dart';
