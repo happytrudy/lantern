@@ -1,5 +1,4 @@
 import 'package:auto_route/annotations.dart';
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lantern/core/common/common.dart';
@@ -31,9 +30,6 @@ class VPNSetting extends HookConsumerWidget {
     );
     final blockAds = ref.watch(
       radianceSettingsProvider.select((s) => s.blockAds),
-    );
-    final telemetryConsent = ref.watch(
-      radianceSettingsProvider.select((s) => s.telemetry),
     );
     return ListView(
       key: const Key('vpn_setting.list'),
@@ -128,16 +124,6 @@ class VPNSetting extends HookConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               AppTile(
-                label: 'setup_private_server'.i18n,
-                icon: AppImagePaths.server,
-                trailing: AppImage(
-                  path: AppImagePaths.arrowForward,
-                  height: 20,
-                ),
-                onPressed: () => appRouter.push(const PrivateServerSetup()),
-              ),
-              DividerSpace(),
-              AppTile(
                 label: 'join_private_server'.i18n,
                 icon: AppImagePaths.joinServer,
                 trailing: AppImage(
@@ -158,35 +144,6 @@ class VPNSetting extends HookConsumerWidget {
                   onPressed: () => appRouter.push(const ManagePrivateServer()),
                 ),
             ],
-          ),
-        ),
-        DividerSpace(),
-        SizedBox(height: 16),
-        AppCard(
-          padding: EdgeInsets.zero,
-          child: AppTile(
-            minHeight: PlatformUtils.isWindows ? 82.0 : 72.0,
-            label: 'anonymous_usage_data'.i18n,
-            icon: AppImagePaths.assessment,
-            subtitle: AutoSizeText(
-              'helps_improve_lantern_performance'.i18n,
-              minFontSize: 12,
-              maxFontSize: 12,
-              maxLines: 2,
-              style: textTheme.labelMedium!.copyWith(
-                color: context.textTertiary,
-                letterSpacing: 0.0,
-              ),
-            ),
-            trailing: SwitchButton(
-              value: telemetryConsent,
-              onChanged: (value) {
-                appLogger.info('Anonymous usage data consent changed: $value');
-                ref
-                    .read(radianceSettingsProvider.notifier)
-                    .setTelemetry(value);
-              },
-            ),
           ),
         ),
       ],

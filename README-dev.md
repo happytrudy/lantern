@@ -521,6 +521,21 @@ flutter test integration_test/vpn/linux_connect_smoke_test.dart \
 
 ## 8. Release & Publishing
 
+### Manual Android and Windows release
+
+The `Manual Android and Windows Release` workflow can be started from the
+GitHub Actions page with **Run workflow**. Enter a version such as
+`9.0.29+97`; the workflow builds and publishes an Android release APK, a
+Windows installer, and a portable Windows ZIP to a GitHub Release. Configure
+these repository secrets before running it:
+
+- `APP_ENV`: base64-encoded application environment file
+- `GRADLE_PROPERTIES`: release Gradle/signing properties
+- `KEYSTORE`: base64-encoded `android/app/keystore.release.jks`
+
+The release tag defaults to `v<version without +build>`. Enable the prerelease
+option when publishing a beta build.
+
 Releases are triggered by pushing a Git tag. CI picks up the tag, determines the build type and target platforms from the tag format, builds all relevant platform artifacts, and publishes a GitHub release.
 
 ### Tag format

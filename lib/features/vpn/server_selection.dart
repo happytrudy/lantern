@@ -184,7 +184,7 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Text(
-            'smart_location'.i18n,
+            '智能路由',
             style: _textTheme?.labelLarge!.copyWith(
               color: context.textSecondary,
             ),
@@ -196,7 +196,7 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
             icon: flag.isEmpty
                 ? AppImagePaths.location
                 : Flag(countryCode: flag),
-            label: displayName.i18n,
+            label: displayName.isEmpty ? '智能路由' : displayName.i18n,
             onPressed: onSmartLocation,
             subtitle: protocol.isEmpty
                 ? null

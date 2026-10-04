@@ -1,0 +1,202 @@
+name: Manual Android and Windows Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version including optional build number, for example 9.0.29+97"
+        required: true
+        type: string
+      release_tag:
+        description: "GitHub Release tag (defaults to v<version without +build>)"
+        required: false
+        type: string
+      prerelease:
+        description: "Mark the GitHub Release as a prerelease"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: manual-release-${{ github.repository }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  APP_VERSION: ${{ inputs.version }}
+  INSTALLER_NAME: lantern-installer
+  BUILD_TYPE: production
+
+jobs:
+  android:
+    name: Android release APK
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          cache-scope: manual-release-android
+          gomobile-cache: "true"
+
+      - name: Set up Android
+        uses: ./.github/actions/setup-android
+
+      - name: Set up Flutter
+        uses: ./.github/actions/setup-flutter
+
+      - name: Stamp version
+        shell: bash
+        run: |
+          python3 - "$APP_VERSION" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+          version = sys.argv[1].strip()
+          path = Path("pubspec.yaml")
+          text = path.read_text()
+          updated, count = re.subn(r"(?m)^version:\s*.*$", f"version: {version}", text, count=1)
+          if count != 1:
+              raise SystemExit("pubspec.yaml version field not found")
+          path.write_text(updated)
+          PY
+
+      - name: Configure Android signing and app environment
+        uses: timheuer/base64-to-file@v1.2
+        with:
+          fileName: keystore.release.jks
+          fileDir: ./android/app
+          encodedString: ${{ secrets.KEYSTORE }}
+
+      - name: Write Android build configuration
+        shell: bash
+        env:
+          GRADLE_PROPERTIES: ${{ secrets.GRADLE_PROPERTIES }}
+          APP_ENV_B64: ${{ secrets.APP_ENV }}
+        run: |
+          mkdir -p "$HOME/.gradle"
+          printf '%s\n' "$GRADLE_PROPERTIES" > "$HOME/.gradle/gradle.properties"
+          printf '%s' "$APP_ENV_B64" | base64 --decode > app.env
+
+      - name: Build release APK
+        run: |
+          make install-android-deps
+          make android-release APP_VERSION="$APP_VERSION" BUILD_TYPE=production INSTALLER_NAME=lantern-installer
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: lantern-release-apk
+          path: lantern-installer.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    name: Windows installer and portable build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        with:
+          cache-scope: manual-release-windows
+
+      - name: Set up Flutter
+        uses: ./.github/actions/setup-flutter
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Set up MinGW
+        shell: bash
+        run: bash ./scripts/ci/setup-windows-toolchain.sh
+
+      - name: Install Inno Setup
+        shell: bash
+        run: ./scripts/ci/choco-retry.sh -y innosetup --version=6.7.1 --allow-downgrade
+
+      - name: Configure app environment
+        uses: timheuer/base64-to-file@v1.2
+        with:
+          fileName: app.env
+          fileDir: ${{ github.workspace }}
+          encodedString: ${{ secrets.APP_ENV }}
+
+      - name: Stamp version
+        shell: pwsh
+        run: |
+          $version = '${{ inputs.version }}'
+          $path = 'pubspec.yaml'
+          $text = Get-Content $path -Raw
+          $updated = [regex]::Replace($text, '(?m)^version:\s*.*$', "version: $version", 1)
+          if ($updated -eq $text) { throw 'pubspec.yaml version field not found' }
+          Set-Content -Path $path -Value $updated -Encoding utf8
+
+      - name: Build Windows release bundle
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ inputs.version }}
+        run: make windows-release APP_VERSION=$env:APP_VERSION BUILD_TYPE=production INSTALLER_NAME=lantern-installer
+
+      - name: Package Windows installer
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ inputs.version }}
+        run: |
+          dart pub global activate fastforge
+          fastforge package --platform=windows --targets=exe --skip-clean --build-dart-define=BUILD_TYPE=production --build-dart-define=VERSION=$env:APP_VERSION --flutter-build-args=verbose
+          $source = "dist/$env:APP_VERSION/lantern-$env:APP_VERSION-windows-setup.exe"
+          if (-not (Test-Path $source)) { throw "Windows installer not found: $source" }
+          Move-Item $source lantern-installer.exe -Force
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath lantern-windows-portable.zip -Force
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lantern-release-windows
+          path: |
+            lantern-installer.exe
+            lantern-windows-portable.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lantern-release-apk
+          path: release-assets
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lantern-release-windows
+          path: release-assets
+
+      - name: Create and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_version="${VERSION%%+*}"
+          tag="${REQUESTED_TAG:-v${base_version}}"
+          args=(--title "Lantern ${base_version}" --generate-notes)
+          if [[ "$PRERELEASE" == "true" ]]; then args+=(--prerelease); fi
+          gh release create "$tag" "release-assets/lantern-installer.apk" "release-assets/lantern-installer.exe" "release-assets/lantern-windows-portable.zip" "${args[@]}"
