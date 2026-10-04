@@ -131,6 +131,22 @@ jobs:
         shell: bash
         run: ./scripts/ci/choco-retry.sh -y innosetup --version=6.7.1 --allow-downgrade
 
+      - name: Install Inno Setup translations
+        shell: pwsh
+        run: |
+          $languageDir = "C:\Program Files (x86)\Inno Setup 6\Languages"
+          if (-not (Test-Path $languageDir)) {
+            throw "Inno Setup Languages directory not found: $languageDir"
+          }
+          foreach ($language in @('Farsi.isl', 'ChineseSimplified.isl')) {
+            $source = Join-Path $env:GITHUB_WORKSPACE "windows\packaging\exe\isl\$language"
+            if (-not (Test-Path $source)) {
+              throw "Translation file not found: $source"
+            }
+            Copy-Item -LiteralPath $source -Destination (Join-Path $languageDir $language) -Force
+          }
+          Get-ChildItem $languageDir -Filter '*.isl' | Select-Object Name
+
       - name: Generate application environment
         shell: pwsh
         run: |
@@ -164,9 +180,15 @@ jobs:
         run: |
           dart pub global activate fastforge
           fastforge package --platform=windows --targets=exe --skip-clean --build-dart-define=BUILD_TYPE=production --build-dart-define=VERSION=$env:APP_VERSION --flutter-build-args=verbose
-          $source = "dist/$env:APP_VERSION/lantern-$env:APP_VERSION-windows-setup.exe"
-          if (-not (Test-Path $source)) { throw "Windows installer not found: $source" }
-          Move-Item $source lantern-installer.exe -Force
+          $distDir = "dist/$env:APP_VERSION"
+          $source = Get-ChildItem -LiteralPath $distDir -Filter '*.exe' -File |
+            Where-Object { $_.Name -match 'windows-setup' } |
+            Select-Object -First 1
+          if ($null -eq $source) {
+            Get-ChildItem -LiteralPath $distDir -Recurse -File | Select-Object FullName
+            throw "Windows installer not found in $distDir"
+          }
+          Move-Item -LiteralPath $source.FullName -Destination lantern-installer.exe -Force
 
       - name: Create portable ZIP
         shell: pwsh
