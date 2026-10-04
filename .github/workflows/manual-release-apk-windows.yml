@@ -65,22 +65,32 @@ jobs:
           path.write_text(updated)
           PY
 
-      - name: Configure Android signing and app environment
-        uses: timheuer/base64-to-file@v1.2
-        with:
-          fileName: keystore.release.jks
-          fileDir: ./android/app
-          encodedString: ${{ secrets.KEYSTORE }}
-
-      - name: Write Android build configuration
+      - name: Generate temporary Android signing configuration
         shell: bash
-        env:
-          GRADLE_PROPERTIES: ${{ secrets.GRADLE_PROPERTIES }}
-          APP_ENV_B64: ${{ secrets.APP_ENV }}
         run: |
+          set -euo pipefail
+          key_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          key_alias="lantern-$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
+          keytool -genkeypair -noprompt -v \
+            -keystore android/app/keystore.release.jks \
+            -storepass "$key_password" -keypass "$key_password" \
+            -alias "$key_alias" -keyalg RSA -keysize 2048 -validity 365 \
+            -dname "CN=Lantern Temporary Release, OU=Build, O=Lantern, C=US"
           mkdir -p "$HOME/.gradle"
-          printf '%s\n' "$GRADLE_PROPERTIES" > "$HOME/.gradle/gradle.properties"
-          printf '%s' "$APP_ENV_B64" | base64 --decode > app.env
+          {
+            echo 'org.gradle.caching=true'
+            echo 'android.useAndroidX=true'
+            echo 'android.enableJetifier=true'
+            echo "KEYSTORE_FILE=keystore.release.jks"
+            echo "KEYSTORE_PWD=$key_password"
+            echo "KEY_ALIAS=$key_alias"
+            echo "KEY_PWD=$key_password"
+          } > "$HOME/.gradle/gradle.properties"
+          cat > app.env <<EOF
+          MACOS_APP_GROUP=org.getlantern.lantern
+          WINDOWS_APP_USER_MODEL_ID=org.getlantern.lantern
+          WINDOWS_GUID=$(python3 -c 'import uuid; print(uuid.uuid4())')
+          EOF
 
       - name: Build release APK
         run: |
@@ -121,12 +131,15 @@ jobs:
         shell: bash
         run: ./scripts/ci/choco-retry.sh -y innosetup --version=6.7.1 --allow-downgrade
 
-      - name: Configure app environment
-        uses: timheuer/base64-to-file@v1.2
-        with:
-          fileName: app.env
-          fileDir: ${{ github.workspace }}
-          encodedString: ${{ secrets.APP_ENV }}
+      - name: Generate application environment
+        shell: pwsh
+        run: |
+          $guid = [guid]::NewGuid().ToString()
+          @(
+            'MACOS_APP_GROUP=org.getlantern.lantern'
+            'WINDOWS_APP_USER_MODEL_ID=org.getlantern.lantern'
+            "WINDOWS_GUID=$guid"
+          ) | Set-Content -Path app.env -Encoding utf8
 
       - name: Stamp version
         shell: pwsh

@@ -526,12 +526,10 @@ flutter test integration_test/vpn/linux_connect_smoke_test.dart \
 The `Manual Android and Windows Release` workflow can be started from the
 GitHub Actions page with **Run workflow**. Enter a version such as
 `9.0.29+97`; the workflow builds and publishes an Android release APK, a
-Windows installer, and a portable Windows ZIP to a GitHub Release. Configure
-these repository secrets before running it:
-
-- `APP_ENV`: base64-encoded application environment file
-- `GRADLE_PROPERTIES`: release Gradle/signing properties
-- `KEYSTORE`: base64-encoded `android/app/keystore.release.jks`
+Windows installer, and a portable Windows ZIP to a GitHub Release. It creates
+a temporary Android signing key and application environment automatically, so
+no repository secrets are required. Each APK has a new signing key; uninstall
+the previous APK before installing a subsequent build.
 
 The release tag defaults to `v<version without +build>`. Enable the prerelease
 option when publishing a beta build.
