@@ -185,16 +185,7 @@ class LanternPlatformService implements LanternCoreService {
 
   @override
   Future<Either<Failure, Unit>> updateTelemetryEvents(bool consent) async {
-    try {
-      final _ = await _methodChannel.invokeMethod(
-        'updateTelemetryEvents',
-        consent,
-      );
-      return Right(unit);
-    } catch (e) {
-      appLogger.error('Error updating telemetry events', e);
-      return Left(e.toFailure());
-    }
+    return right(unit);
   }
 
   @override
@@ -486,13 +477,7 @@ class LanternPlatformService implements LanternCoreService {
 
   @override
   Future<Either<Failure, bool>> isTelemetryEnabled() async {
-    try {
-      final res = await _methodChannel.invokeMethod<bool>('isTelemetryEnabled');
-      return right(res ?? false);
-    } catch (e, st) {
-      appLogger.error('isTelemetryEnabled failed', e, st);
-      return Left(e.toFailure());
-    }
+    return right(false);
   }
 
   @override

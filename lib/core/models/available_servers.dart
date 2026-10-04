@@ -48,6 +48,19 @@ class AvailableServers {
           );
     return ranked.isEmpty ? null : ranked.first;
   }
+
+  /// Fastest joined self-hosted server. Official Lantern servers are never
+  /// considered by the pure build's smart routing mode.
+  Server? get fastestPrivateServer {
+    final ranked = userServers
+        .where((s) => s.hasSuccessfulProbe && !s.isProbedUnreachable)
+        .toList()
+      ..sort((a, b) => a.selectionHistory!.lastSuccessDelayMs.compareTo(
+            b.selectionHistory!.lastSuccessDelayMs,
+          ));
+    if (ranked.isNotEmpty) return ranked.first;
+    return userServers.isEmpty ? null : userServers.first;
+  }
 }
 
 /// Consecutive failed probes before a server is treated as unreachable rather

@@ -94,10 +94,8 @@ class Home extends HookConsumerWidget {
       });
       return () => tabController.removeListener(sync);
     }, [tabController]);
-    final isUserPro = ref.watch(isUserProProvider);
-    final userLoggedIn = ref.watch(
-      appSettingProvider.select((s) => s.userLoggedIn),
-    );
+    final isUserPro = false;
+    final userLoggedIn = false;
     final unboundedHidden = ref.watch(
       appSettingProvider.select((s) => s.unboundedHidden),
     );
@@ -148,24 +146,6 @@ class Home extends HookConsumerWidget {
       });
       return null;
     }, const []);
-
-    // Telemetry consent dialog — fires once per app session after the
-    // first successful connection, gated on the metrics + traces
-    // feature flags. Preserved from the old Home behaviour.
-    useEffect(() {
-      final appSetting = ref.read(appSettingProvider);
-      if (appSetting.successfulConnection) {
-        if (!appSetting.telemetryDialogDismissed &&
-            (featureFlag.getBool(FeatureFlag.metrics) &&
-                featureFlag.getBool(FeatureFlag.traces))) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _showHelpLanternDialog(context, ref);
-            ref.read(appSettingProvider.notifier).setShowTelemetryDialog(true);
-          });
-        }
-      }
-      return null;
-    }, [featureFlag]);
 
     ref.read(appEventProvider);
 
@@ -275,11 +255,6 @@ class Home extends HookConsumerWidget {
                 );
               },
             )
-          else if (!userLoggedIn)
-            AppTextButton(
-              label: 'sign_in'.i18n,
-              onPressed: () => appRouter.push(const SignInEmail()),
-            ),
         ],
         // Tab strip collapses when Unbounded is unavailable — either the
         // server flag is off (censored region) or the user hid the tab
@@ -322,58 +297,4 @@ class Home extends HookConsumerWidget {
             ),
     );
   }
-}
-
-void _showHelpLanternDialog(BuildContext context, WidgetRef ref) {
-  final textTheme = Theme.of(context).textTheme;
-  AppDialog.customDialog(
-    context: context,
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        const SizedBox(height: 24),
-        const AppImage(path: AppImagePaths.assessment),
-        const SizedBox(height: 24),
-        Text(
-          'help_improve_lantern'.i18n,
-          style: textTheme.headlineSmall!.copyWith(color: context.textPrimary),
-        ),
-        SizedBox(height: defaultSize),
-        Text(
-          'share_anonymous_usage_data'.i18n,
-          style: textTheme.bodyMedium!.copyWith(color: context.textSecondary),
-        ),
-        SizedBox(height: defaultSize),
-        Text(
-          'data_we_collect'.i18n,
-          style: AppTextStyles.bodyMediumBold.copyWith(
-            color: context.textSecondary,
-          ),
-        ),
-        SizedBox(height: defaultSize),
-        Text(
-          'you_can_change_anytime'.i18n,
-          style: textTheme.bodyMedium!.copyWith(color: context.textSecondary),
-        ),
-      ],
-    ),
-    action: [
-      AppTextButton(
-        label: 'dont_allow'.i18n,
-        textColor: context.textDisabled,
-        onPressed: () {
-          context.pop();
-          ref.read(radianceSettingsProvider.notifier).setTelemetry(false);
-        },
-      ),
-      AppTextButton(
-        label: 'allow'.i18n,
-        textColor: AppColors.blue6,
-        onPressed: () {
-          context.pop();
-          ref.read(radianceSettingsProvider.notifier).setTelemetry(true);
-        },
-      ),
-    ],
-  );
 }

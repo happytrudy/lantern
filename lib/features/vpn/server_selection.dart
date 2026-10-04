@@ -48,7 +48,7 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
   Widget build(BuildContext context) {
     final selected = ref.watch(serverLocationProvider);
     final availableServers = ref.watch(availableServersProvider);
-    final isUserPro = ref.watch(isUserProProvider);
+    final isUserPro = true;
 
     _textTheme = TextTheme.of(context);
 
@@ -92,25 +92,23 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
       title: '',
       appBar: appBar,
       body: isPrivateServerFound
-          ? _buildBody(selectedServer, isUserPro)
+          ? _buildPrivateServersOnly(selectedServer)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSmartLocation(selectedServer),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Text(
-                    'smart_routing_mode_description'.i18n,
-                    style: _textTheme?.bodyMedium!.copyWith(
-                      color: context.textSecondary,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: size24),
-                Flexible(child: ServerLocationListView(userPro: isUserPro)),
+                Expanded(child: PrivateServerLocationListView()),
               ],
             ),
+    );
+  }
+
+  Widget _buildPrivateServersOnly(ServerLocation selectedServer) {
+    return Column(
+      children: [
+        _buildSmartLocation(selectedServer),
+        const SizedBox(height: 12),
+        const Expanded(child: PrivateServerLocationListView()),
+      ],
     );
   }
 
@@ -174,10 +172,6 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
   }
 
   Widget _buildSmartLocation(ServerLocation serverLocation) {
-    final autoLocation = serverLocation.autoLocation;
-    final displayName = autoLocation?.displayName ?? 'fastest_server'.i18n;
-    final flag = autoLocation?.countryCode ?? '';
-    final protocol = autoLocation?.protocol ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -193,19 +187,15 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
         AppCard(
           padding: EdgeInsets.zero,
           child: AppTile(
-            icon: flag.isEmpty
-                ? AppImagePaths.location
-                : Flag(countryCode: flag),
-            label: displayName.isEmpty ? '智能路由' : displayName.i18n,
+            icon: AppImagePaths.location,
+            label: '智能路由',
             onPressed: onSmartLocation,
-            subtitle: protocol.isEmpty
-                ? null
-                : Text(
-                    protocol.capitalize,
-                    style: _textTheme!.labelMedium!.copyWith(
-                      color: context.textTertiary,
-                    ),
-                  ),
+            subtitle: Text(
+              '从自建服务器中选择延迟最低的节点',
+              style: _textTheme!.labelMedium!.copyWith(
+                color: context.textTertiary,
+              ),
+            ),
             trailing: AppImage(
               path: AppImagePaths.blot,
               color: context.statusWarningBgDot,
@@ -225,19 +215,15 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
       }
     }
 
-    final serverLocation = ref.read(serverLocationProvider);
-
-    final type = serverLocation.serverType.toServerLocationType;
-    if (type == ServerLocationType.auto) {
-      appLogger.debug(
-        'Already in smart location, no need to switch, Just pop the screen',
-      );
-      appRouter.popUntilRoot();
+    final fastest = ref.read(availableServersProvider).value?.fastestPrivateServer;
+    if (fastest == null) {
+      context.showSnackBar('请先添加自建服务器');
       return;
     }
-
-    /// User clicking here mean user want to switch to auto server regardless of VPN state
-    final result = await ref.read(vpnProvider.notifier).startVPN(force: true);
+    final result = await ref.read(vpnProvider.notifier).connectToServer(
+          ServerLocationType.privateServer,
+          fastest.tag,
+        );
 
     result.fold(
       (failure) {
@@ -251,7 +237,11 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
               appRouter.maybePop();
               final retryResult = await ref
                   .read(vpnProvider.notifier)
-                  .startVPN(skipConflictCheck: true, force: true);
+              .connectToServer(
+                ServerLocationType.privateServer,
+                fastest.tag,
+                skipConflictCheck: true,
+              );
               if (!context.mounted) return;
               retryResult.fold((failure) {
                 context.showSnackBar(failure.localizedErrorMessage);
@@ -264,7 +254,16 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
         }
       },
       (_) async {
-        await ref.read(serverLocationProvider.notifier).switchToAuto();
+        ref.read(serverLocationProvider.notifier).updateServerLocation(
+              ServerLocation(
+                serverType: ServerLocationType.privateServer.name,
+                serverName: fastest.tag,
+                country: fastest.location.country,
+                city: fastest.location.city,
+                countryCode: fastest.location.countryCode,
+                protocol: fastest.type,
+              ),
+            );
         appRouter.popUntilRoot();
       },
     );

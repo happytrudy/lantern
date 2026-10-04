@@ -1,9 +1,6 @@
 import 'package:fpdart/fpdart.dart';
 import 'package:lantern/core/common/common.dart';
 import 'package:lantern/core/models/available_servers.dart';
-import 'package:lantern/core/models/server_location.dart';
-import 'package:lantern/features/vpn/provider/server_location_notifier.dart';
-import 'package:lantern/features/vpn/provider/vpn_status_notifier.dart';
 import 'package:lantern/lantern/lantern_service_notifier.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -26,8 +23,7 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
         throw Exception('Failed to load available servers');
       },
       (servers) {
-        _pushFastestToSmartLocation(servers);
-        return servers;
+        return _privateServersOnly(servers);
       },
     );
   }
@@ -56,10 +52,13 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
         appLogger.error('Error getting available servers: ${failure.error}');
       },
       (servers) {
-        state = AsyncValue.data(servers);
-        _pushFastestToSmartLocation(servers);
+        state = AsyncValue.data(_privateServersOnly(servers));
       },
     );
+  }
+
+  AvailableServers _privateServersOnly(AvailableServers servers) {
+    return AvailableServers(servers.userServers);
   }
 
   /// Reloads available servers from the latest persisted Smart Location probe data.
@@ -98,46 +97,4 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
     }
   }
 
-  /// Pushes the fastest Lantern server to the Smart Location if the current selection is auto
-  void _pushFastestToSmartLocation(AvailableServers servers) {
-    final fastest = servers.fastestLanternServer;
-    if (fastest == null) return;
-
-    // Don't push the fastest server if the VPN is active.
-    // It would override the server the user is connected to.
-    final vpnStatus = ref.read(vPNStatusProvider).value?.status;
-    if (vpnStatus != VPNStatus.disconnected) {
-      appLogger.debug('Skipping Smart Location push, VPN status is $vpnStatus');
-      return;
-    }
-    final current = ref.read(serverLocationProvider);
-    if (current.serverType.toServerLocationType != ServerLocationType.auto) {
-      return;
-    }
-    if (current.autoLocation?.tag == fastest.tag) return;
-
-    final country = fastest.location.country;
-    final city = fastest.location.city;
-    appLogger.debug(
-      'Pushing fastest server to Smart Location: '
-      'tag=${fastest.tag} delay=${fastest.selectionHistory?.lastSuccessDelayMs}ms',
-    );
-    ref
-        .read(serverLocationProvider.notifier)
-        .updateServerLocation(
-          ServerLocation(
-            serverType: ServerLocationType.auto.name,
-            serverName: '',
-            displayName: '',
-            protocol: '',
-            city: city,
-            autoLocation: AutoLocation(
-              countryCode: fastest.location.countryCode,
-              country: country,
-              displayName: '$country - $city',
-              tag: fastest.tag,
-            ),
-          ),
-        );
-  }
 }

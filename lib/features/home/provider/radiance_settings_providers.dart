@@ -29,7 +29,6 @@ class RadianceSettings extends _$RadianceSettings {
     final svc = ref.read(lanternServiceProvider);
     final blockAdsF = svc.isBlockAdsEnabled();
     final routingF = svc.isSmartRoutingEnabled();
-    final telemetryF = svc.isTelemetryEnabled();
     final splitF = PlatformUtils.isIOS ? null : svc.isSplitTunnelingEnabled();
     // Peer-proxy probe runs on every platform with a handler wired up:
     // Windows + Linux via FFI, macOS + Android + iOS via MethodChannel.
@@ -40,7 +39,6 @@ class RadianceSettings extends _$RadianceSettings {
 
     final blockAds = await blockAdsF;
     final routing = await routingF;
-    final telemetry = await telemetryF;
     final split = splitF == null ? null : await splitF;
     final peer = await peerF;
     final unbounded = await unboundedF;
@@ -53,7 +51,7 @@ class RadianceSettings extends _$RadianceSettings {
         (_) => defaults.routingMode,
         (smart) => smart ? RoutingMode.smart : RoutingMode.full,
       ),
-      telemetry: telemetry.fold((_) => defaults.telemetry, (v) => v),
+      telemetry: false,
       splitTunneling: split == null
           ? defaults.splitTunneling
           : split.fold((_) => defaults.splitTunneling, (v) => v),
@@ -100,13 +98,8 @@ class RadianceSettings extends _$RadianceSettings {
   }
 
   Future<void> setTelemetry(bool consent) async {
-    final svc = ref.read(lanternServiceProvider);
-    final result = await svc.updateTelemetryEvents(consent);
     if (!ref.mounted) return;
-    result.fold(
-      (err) => appLogger.error('updateTelemetryEvents failed: ${err.error}'),
-      (_) => state = state.copyWith(telemetry: consent),
-    );
+    state = state.copyWith(telemetry: false);
   }
 
   /// Enable/disable the peer-proxy (Share My Connection) radiance

@@ -60,11 +60,6 @@ class _SettingState extends ConsumerState<Setting>
   Widget build(BuildContext context) {
     // Keep store actions in sync with country-based billing availability.
     ref.watch(countryCodeProvider);
-    final isExpired = ref.watch(isUserExpiredProvider);
-    final user = ref.watch(homeProvider).value;
-    final isUserPro = ref.watch(isUserProProvider);
-    final email = ref.watch(userEmailProvider);
-
     final appSetting = ref.watch(appSettingProvider);
     // Server-side gate. Censored regions get Features[unbounded]=false,
     // which hides the Unbounded settings sub-page link below.
@@ -72,14 +67,9 @@ class _SettingState extends ConsumerState<Setting>
         .watch(featureFlagProvider)
         .getBool(FeatureFlag.unbounded);
 
-    final hasProSession = hasRegisteredProAccount(user);
-
-    final isAuthenticated = appSetting.userLoggedIn || hasProSession;
-
     final locale = appSetting.locale;
     final themeMode = appSetting.themeMode;
     final textTheme = Theme.of(context).textTheme;
-    final userLoggedIn = appSetting.userLoggedIn;
 
     return BaseScreen(
       title: 'settings'.i18n,
@@ -87,62 +77,6 @@ class _SettingState extends ConsumerState<Setting>
       body: ListView(
         padding: EdgeInsets.symmetric(horizontal: defaultSize),
         children: <Widget>[
-          if (!isUserPro)
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: ProButton(
-                key: const Key('setting.upgrade_pro_button'),
-                label: isExpired
-                    ? 'renew_pro_subscription'.i18n
-                    : 'upgrade_to_pro'.i18n,
-                onPressed: () {
-                  appRouter.push(Plans());
-                },
-              ),
-            ),
-          const SizedBox(height: defaultSize),
-          if (userLoggedIn || isUserPro)
-            AppCard(
-              padding: EdgeInsets.zero,
-              margin: EdgeInsets.zero,
-              child: AppTile(
-                tileKey: const Key('setting.account_tile'),
-                label: 'account'.i18n,
-                labelWidget: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: <Widget>[
-                    Text('account'.i18n),
-                    if (isUserPro || isExpired)
-                      SubscriptionTags(
-                        type: isUserPro
-                            ? SubscriptionTagType.pro
-                            : SubscriptionTagType.expired,
-                      ),
-                  ],
-                ),
-                icon: AppImagePaths.accountSetting,
-                subtitle: email.isEmpty
-                    ? null
-                    : Text(
-                        email,
-                        style: textTheme.labelMedium!.copyWith(
-                          color: context.textLink,
-                        ),
-                      ),
-                onPressed: () => settingMenuTap(_SettingType.account),
-              ),
-            ),
-          const SizedBox(height: defaultSize),
-          if (!isAuthenticated)
-            AppCard(
-              padding: EdgeInsets.zero,
-              child: AppTile(
-                tileKey: const Key('setting.sign_in_tile'),
-                label: 'sign_in'.i18n,
-                icon: AppImagePaths.signIn,
-                onPressed: () => settingMenuTap(_SettingType.signIn),
-              ),
-            ),
           const SizedBox(height: defaultSize),
           AppCard(
             padding: EdgeInsets.zero,
@@ -197,54 +131,6 @@ class _SettingState extends ConsumerState<Setting>
             padding: EdgeInsets.zero,
             child: Column(
               children: [
-                AppTile(
-                  tileKey: const Key('setting.support_tile'),
-                  label: 'support'.i18n,
-                  icon: AppImagePaths.support,
-                  onPressed: () => settingMenuTap(_SettingType.support),
-                ),
-                FutureBuilder<bool>(
-                  future: _canCheckForUpdates,
-                  builder: (context, snapshot) {
-                    final show =
-                        PlatformUtils.isDesktop ||
-                        (snapshot.connectionState == ConnectionState.done &&
-                            snapshot.data == true);
-                    if (!show) return const SizedBox.shrink();
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        DividerSpace(),
-                        AppTile(
-                          tileKey: const Key('setting.check_for_updates_tile'),
-                          label: 'check_for_updates'.i18n,
-                          semanticsLabel: 'check_for_updates'.i18n,
-                          icon: AppImagePaths.update,
-                          onPressed: () async => await settingMenuTap(
-                            _SettingType.checkForUpdates,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-                if (!isStoreVersion()) ...[
-                  DividerSpace(),
-                  AppTile(
-                    label: 'get_30_days_of_pro_free'.i18n,
-                    icon: AppImagePaths.star,
-                    onPressed: () => settingMenuTap(_SettingType.getPro),
-                  ),
-                ],
-                if (canUseStoreBilling() && !isUserPro) ...[
-                  DividerSpace(),
-                  AppTile(
-                    label: 'restore_purchase'.i18n,
-                    icon: AppImagePaths.restorePurchase,
-                    onPressed: () =>
-                        settingMenuTap(_SettingType.restorePurchase),
-                  ),
-                ],
               ],
             ),
           ),

@@ -171,10 +171,7 @@ class LanternService implements LanternCoreService {
 
   @override
   Future<Either<Failure, Unit>> updateTelemetryEvents(bool consent) {
-    if (PlatformUtils.isFFISupported) {
-      return _ffiService.updateTelemetryEvents(consent);
-    }
-    return _platformService.updateTelemetryEvents(consent);
+    return Future.value(right(unit));
   }
 
   @override
@@ -740,10 +737,7 @@ class LanternService implements LanternCoreService {
 
   @override
   Future<Either<Failure, String>> featureFlag() {
-    if (PlatformUtils.isFFISupported) {
-      return _ffiService.featureFlag();
-    }
-    return _platformService.featureFlag();
+    return Future.value(right('{}'));
   }
 
   @override
@@ -964,10 +958,7 @@ class LanternService implements LanternCoreService {
 
   @override
   Future<Either<Failure, bool>> isTelemetryEnabled() {
-    if (PlatformUtils.isFFISupported) {
-      return _ffiService.isTelemetryEnabled();
-    }
-    return _platformService.isTelemetryEnabled();
+    return Future.value(right(false));
   }
 
   @override

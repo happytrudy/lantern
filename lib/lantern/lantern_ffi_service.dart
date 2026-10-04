@@ -311,18 +311,7 @@ class LanternFFIService implements LanternCoreService {
 
   @override
   Future<Either<Failure, Unit>> updateTelemetryEvents(bool consent) async {
-    try {
-      final result = await runInBackground<String>(() async {
-        return _ffiService
-            .updateTelemetryConsent(consent ? 1 : 0)
-            .toDartString();
-      });
-      checkAPIError(result);
-      return right(unit);
-    } catch (e, st) {
-      appLogger.error('Error updating telemetry events', e, st);
-      return Left(e.toFailure());
-    }
+    return right(unit);
   }
 
   @override
@@ -1855,13 +1844,7 @@ class LanternFFIService implements LanternCoreService {
 
   @override
   Future<Either<Failure, bool>> isTelemetryEnabled() async {
-    try {
-      final res = _ffiService.isTelemetryEnabled();
-      return right(res != 0);
-    } catch (e, st) {
-      appLogger.error('isTelemetryEnabled error: $e', e, st);
-      return Left(e.toFailure());
-    }
+    return right(false);
   }
 
   @override
