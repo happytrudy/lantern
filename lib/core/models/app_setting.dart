@@ -8,6 +8,7 @@ class AppSetting {
   final bool successfulConnection;
   final String dataCapThreshold;
   final bool onboardingCompleted;
+  final bool autoConnectOnStartup;
   // Unbounded preferences. autoEnable: turn the peer share on whenever
   // the VPN connects (defaults on per the Figma spec). hideTab: hide
   // the Unbounded tab + collapse the tab bar when the user doesn't
@@ -33,6 +34,7 @@ class AppSetting {
     this.successfulConnection = false,
     this.dataCapThreshold = '',
     this.onboardingCompleted = false,
+    this.autoConnectOnStartup = false,
     this.unboundedAutoEnable = false,
     this.unboundedHidden = false,
     this.unboundedWelcomeSeen = false,
@@ -53,6 +55,7 @@ class AppSetting {
     bool? successfulConnection,
     String? dataCapThreshold,
     bool? onboardingCompleted,
+    bool? autoConnectOnStartup,
     bool? unboundedAutoEnable,
     bool? unboundedHidden,
     bool? unboundedWelcomeSeen,
@@ -68,6 +71,7 @@ class AppSetting {
       successfulConnection: successfulConnection ?? this.successfulConnection,
       dataCapThreshold: dataCapThreshold ?? this.dataCapThreshold,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      autoConnectOnStartup: autoConnectOnStartup ?? this.autoConnectOnStartup,
       unboundedAutoEnable: unboundedAutoEnable ?? this.unboundedAutoEnable,
       unboundedHidden: unboundedHidden ?? this.unboundedHidden,
       unboundedWelcomeSeen: unboundedWelcomeSeen ?? this.unboundedWelcomeSeen,
@@ -86,6 +90,7 @@ class AppSetting {
         'successfulConnection': successfulConnection,
         'dataCapThreshold': dataCapThreshold,
         'onboardingCompleted': onboardingCompleted,
+        'autoConnectOnStartup': autoConnectOnStartup,
         'unboundedAutoEnable': unboundedAutoEnable,
         'unboundedHidden': unboundedHidden,
         'unboundedWelcomeSeen': unboundedWelcomeSeen,
@@ -102,6 +107,7 @@ class AppSetting {
         successfulConnection: json['successfulConnection'] == true,
         dataCapThreshold: (json['dataCapThreshold'] ?? '').toString(),
         onboardingCompleted: json['onboardingCompleted'] == true,
+        autoConnectOnStartup: json['autoConnectOnStartup'] == true,
         // Opt-in: auto-enable only when the user explicitly turned it on.
         // Missing/unset means manual — Unbounded does not start on its own
         // until the user enables it (toggle) or opts into auto-enable.

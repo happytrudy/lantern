@@ -4,8 +4,6 @@ import 'package:fpdart/fpdart.dart';
 import 'package:lantern/core/common/common.dart' hide DeveloperMode;
 import 'package:lantern/core/models/app_data.dart';
 import 'package:lantern/core/models/app_event.dart';
-import 'package:lantern/core/models/available_servers.dart';
-import 'package:lantern/core/models/server_location.dart';
 import 'package:lantern/core/models/datacap_info.dart';
 import 'package:lantern/core/models/lantern_status.dart';
 import 'package:lantern/core/models/macos_extension_state.dart';
@@ -84,17 +82,11 @@ abstract class LanternCoreService {
 
   Future<Either<Failure, String>> connectToServer(String location, String tag);
 
-  Future<bool> isTagAvailable(String tag);
-
   Future<bool> checkVpnConflict();
 
   Stream<LanternStatus> watchVPNStatus();
 
   Stream<List<String>> watchLogs(String path);
-
-  Future<Either<Failure, Server>> getAutoServerLocation();
-
-  Future<Either<Failure, ServerLocation>> getSelectedServerLocation();
 
   Future<Either<Failure, String>> featureFlag();
 
@@ -282,10 +274,7 @@ abstract class LanternCoreService {
   //Change email
   /// Verifies the account password without mutating anything. Used to gate
   /// the change-email flow before the user enters a new email.
-  Future<Either<Failure, String>> verifyPassword(
-    String email,
-    String password,
-  );
+  Future<Either<Failure, String>> verifyPassword(String email, String password);
 
   Future<Either<Failure, String>> startChangeEmail(
     String newEmail,
@@ -376,9 +365,6 @@ abstract class LanternCoreService {
     required String accessToken,
     required String inviteName,
   });
-
-  ///Custom/lantern server methods
-  Future<Either<Failure, AvailableServers>> getLanternAvailableServers();
 
   ///MacOS System Extension methods
   Future<Either<Failure, String>> triggerSystemExtension();

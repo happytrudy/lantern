@@ -27,8 +27,6 @@ import 'package:lantern/core/models/user.dart';
 import 'package:lantern/core/models/user_message.dart';
 import 'package:path/path.dart' as p;
 
-import '../core/models/available_servers.dart';
-import '../core/models/server_location.dart';
 import '../core/models/macos_extension_state.dart';
 import '../core/models/plan_data.dart';
 import '../core/models/referral_attach_response.dart';
@@ -690,36 +688,6 @@ class LanternFFIService implements LanternCoreService {
     } catch (e) {
       appLogger.error('Error starting VPN: $e');
       return Left(e.toFailure());
-    }
-  }
-
-  @override
-  Future<bool> isTagAvailable(String tag) async {
-    try {
-      final result = await runInBackground<String>(() async {
-        final tagPtr = tag.toCharPtr;
-        try {
-          final resultPtr = _ffiService.isTagAvailable(tagPtr);
-          if (resultPtr == nullptr) {
-            return 'true';
-          }
-          try {
-            return resultPtr.toDartString();
-          } finally {
-            _ffiService.freeCString(resultPtr);
-          }
-        } finally {
-          malloc.free(tagPtr);
-        }
-      });
-      return result == 'true';
-    } catch (e, st) {
-      appLogger.error(
-        'Error checking tag availability, assuming available',
-        e,
-        st,
-      );
-      return true;
     }
   }
 
@@ -1461,23 +1429,6 @@ class LanternFFIService implements LanternCoreService {
   }
 
   @override
-  Future<Either<Failure, AvailableServers>> getLanternAvailableServers() async {
-    try {
-      final result = await runInBackground<String>(() async {
-        return _ffiService.getAvailableServers().toDartString();
-      });
-      checkAPIError(result);
-      final servers = AvailableServers.fromJson(
-        jsonDecode(result) as List<dynamic>,
-      );
-      return Right(servers);
-    } catch (e, stackTrace) {
-      appLogger.error('Error getting available servers', e, stackTrace);
-      return Left(e.toFailure());
-    }
-  }
-
-  @override
   Future<Either<Failure, String>> deviceRemove({
     required String deviceId,
   }) async {
@@ -1601,55 +1552,6 @@ class LanternFFIService implements LanternCoreService {
       return Right('ok');
     } catch (e, stackTrace) {
       appLogger.error('Error starting change email', e, stackTrace);
-      return Left(e.toFailure());
-    }
-  }
-
-  @override
-  Future<Either<Failure, Server>> getAutoServerLocation() async {
-    try {
-      final result = await runInBackground<String>(() async {
-        return _ffiService.getAutoLocation().toDartString();
-      });
-      checkAPIError(result);
-      return Right(Server.fromJson(jsonDecode(result)));
-    } catch (e, stackTrace) {
-      appLogger.error('Error while getting auto location', e, stackTrace);
-      return Left(e.toFailure());
-    }
-  }
-
-  @override
-  Future<Either<Failure, ServerLocation>> getSelectedServerLocation() async {
-    try {
-      final result = await runInBackground<String>(() async {
-        return _ffiService.getSelectedServerJSON().toDartString();
-      });
-      checkAPIError(result);
-      // Normalize a missing selection to an empty JSON object so callers
-      // fall into the "auto" branch below instead of throwing.
-      final raw = result.isEmpty ? '{}' : result;
-      final json = jsonDecode(raw) as Map<String, dynamic>;
-      final serverJson = json['server'] as Map<String, dynamic>?;
-      if (serverJson == null) {
-        return Right(
-          ServerLocation(
-            serverType: ServerLocationType.auto.name,
-            serverName: '',
-          ),
-        );
-      }
-      final server = Server.fromJson(serverJson);
-      final isLantern = server.isLantern;
-      return Right(
-        ServerLocation.fromServer(server: server).copyWith(
-          serverType: isLantern
-              ? ServerLocationType.lanternLocation.name
-              : ServerLocationType.privateServer.name,
-        ),
-      );
-    } catch (e, stackTrace) {
-      appLogger.error('Error while getting selected server', e, stackTrace);
       return Left(e.toFailure());
     }
   }

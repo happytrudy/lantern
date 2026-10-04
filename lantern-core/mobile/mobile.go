@@ -386,21 +386,6 @@ func StopVPN() error {
 	return err
 }
 
-// IsTagAvailable checks if a server with the given tag exists in the server list.
-// Returns true if the tag is found. Returns true when the check cannot be performed
-// (fail-open: allows connection attempts to proceed normally).
-func IsTagAvailable(tag string) bool {
-	found, err := withCoreR(func(c lanterncore.Core) (bool, error) {
-		_, ok, err := c.GetServerByTagJSON(tag)
-		return ok, err
-	})
-	if err != nil {
-		slog.Warn("Unable to check tag availability, assuming available", "tag", tag, "error", err)
-		return true
-	}
-	return found
-}
-
 // ConnectToServer connects to a server using the provided location type and tag.
 // It works with private servers and lantern location servers.
 func ConnectToServer(tag string) error {
@@ -419,15 +404,6 @@ func ConnectToServer(tag string) error {
 	return err
 }
 
-// GetAvailableServers returns the available servers in JSON format.
-//
-// Returns string (not []byte) — see AvailableFeatures for the rationale.
-func GetAvailableServers() (string, error) {
-	return withCoreR(func(c lanterncore.Core) (string, error) {
-		return string(c.GetAvailableServers()), nil
-	})
-}
-
 func IsVPNConnected() bool {
 	ok, err := withCoreR(func(c lanterncore.Core) (bool, error) {
 		return c.IsVPNRunning()
@@ -436,34 +412,6 @@ func IsVPNConnected() bool {
 		return false
 	}
 	return ok
-}
-
-func GetSelectedServer() string {
-	s, err := withCoreR(func(c lanterncore.Core) (string, error) {
-		return c.GetSelectedServerTag()
-	})
-	if err != nil {
-		return ""
-	}
-	return s
-}
-
-func GetSelectedServerJSON() (string, error) {
-	return withCoreR(func(c lanterncore.Core) (string, error) {
-		b, err := c.GetSelectedServerJSON()
-		return string(b), err
-	})
-}
-
-func GetAutoLocation() (string, error) {
-	return withCoreR(func(c lanterncore.Core) (string, error) {
-		data, err := c.GetAutoLocationJSON()
-		if err != nil {
-			return "", err
-		}
-		slog.Debug("Auto location server:", "server", string(data))
-		return string(data), nil
-	})
 }
 
 // Split Tunnel Methods

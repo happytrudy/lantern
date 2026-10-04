@@ -8,14 +8,12 @@ import 'package:lantern/core/common/common.dart' hide DeveloperMode;
 import 'package:lantern/core/models/app_data.dart';
 import 'package:lantern/core/models/app_data_event.dart';
 import 'package:lantern/core/models/app_event.dart';
-import 'package:lantern/core/models/available_servers.dart';
 import 'package:lantern/core/models/datacap_info.dart';
 import 'package:lantern/core/models/macos_extension_state.dart';
 import 'package:lantern/core/models/plan_data.dart';
 import 'package:lantern/core/models/private_server_status.dart';
 import 'package:lantern/core/models/referral_attach_response.dart';
 import 'package:lantern/core/models/restore_subscription_response.dart';
-import 'package:lantern/core/models/server_location.dart';
 import 'package:lantern/core/models/user.dart';
 import 'package:lantern/core/models/user_message.dart';
 import 'package:lantern/core/services/app_purchase.dart';
@@ -232,20 +230,6 @@ class LanternPlatformService implements LanternCoreService {
     } catch (e) {
       appLogger.debug('Error setting private server');
       return Left(e.toFailure());
-    }
-  }
-
-  @override
-  Future<bool> isTagAvailable(String tag) async {
-    try {
-      final result = await _methodChannel.invokeMethod<bool>(
-        'isTagAvailable',
-        tag,
-      );
-      return result ?? true;
-    } catch (e) {
-      appLogger.error('Error checking if tag is available', e);
-      return true;
     }
   }
 
@@ -1058,9 +1042,7 @@ class LanternPlatformService implements LanternCoreService {
   }
 
   @override
-  Future<Either<Failure, Unit>> oAuthDeviceLimitCallback(
-    String token,
-  ) async {
+  Future<Either<Failure, Unit>> oAuthDeviceLimitCallback(String token) async {
     try {
       await _methodChannel.invokeMethod<String>(
         'oauthDeviceLimitCallback',
@@ -1559,73 +1541,6 @@ class LanternPlatformService implements LanternCoreService {
   }
 
   ///Server location methods
-  @override
-  Future<Either<Failure, Server>> getAutoServerLocation() async {
-    try {
-      final result = await _methodChannel.invokeMethod<String>(
-        'getAutoServerLocation',
-      );
-      return right(Server.fromJson(jsonDecode(result!)));
-    } catch (e, stackTrace) {
-      appLogger.error('Error fetching auto server location', e, stackTrace);
-      return Left(e.toFailure());
-    }
-  }
-
-  @override
-  Future<Either<Failure, ServerLocation>> getSelectedServerLocation() async {
-    try {
-      final result = await _methodChannel.invokeMethod<String>(
-        'getSelectedServerJSON',
-      );
-      // Normalize a missing selection to an empty JSON object so callers
-      // fall into the "auto" branch below instead of throwing.
-      final raw = (result == null || result.isEmpty) ? '{}' : result;
-      final json = jsonDecode(raw) as Map<String, dynamic>;
-      final serverJson = json['server'] as Map<String, dynamic>?;
-      if (serverJson == null) {
-        return Right(
-          ServerLocation(
-            serverType: ServerLocationType.auto.name,
-            serverName: '',
-          ),
-        );
-      }
-      final server = Server.fromJson(serverJson);
-      return Right(
-        ServerLocation.fromServer(server: server).copyWith(
-          serverType: server.isLantern
-              ? ServerLocationType.lanternLocation.name
-              : ServerLocationType.privateServer.name,
-        ),
-      );
-    } catch (e, stackTrace) {
-      appLogger.error('Error fetching selected server', e, stackTrace);
-      return Left(e.toFailure());
-    }
-  }
-
-  @override
-  Future<Either<Failure, AvailableServers>> getLanternAvailableServers() async {
-    try {
-      final result = await _methodChannel.invokeMethod(
-        'getLanternAvailableServers',
-      );
-      appLogger.info("Servers JSON: $result");
-      final servers = AvailableServers.fromJson(
-        jsonDecode(result) as List<dynamic>,
-      );
-      return Right(servers);
-    } catch (e, stackTrace) {
-      appLogger.error(
-        'Error fetching Lantern available servers',
-        e,
-        stackTrace,
-      );
-      return Left(e.toFailure());
-    }
-  }
-
   @override
   Future<Either<Failure, Unit>> deletePrivateServerByName(
     String serverName,

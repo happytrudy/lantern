@@ -1,20 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:i18n_extension/default.i18n.dart';
-import 'package:lantern/core/common/app_eum.dart';
-import 'package:lantern/core/models/datacap_info.dart';
-import 'package:lantern/core/models/server_location.dart';
 import 'package:lantern/core/services/logger_service.dart';
 import 'package:lantern/features/home/provider/country_code_notifier.dart';
 import 'package:lantern/features/home/provider/home_notifier.dart';
-import 'package:lantern/features/vpn/provider/available_servers_notifier.dart';
-import 'package:lantern/features/vpn/provider/server_location_notifier.dart';
 import 'package:lantern/lantern/lantern_service_notifier.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-
-import '../../../core/models/available_servers.dart';
-import 'data_cap_info_provider.dart' show dataCapInfoProvider;
 
 part 'app_event_notifier.g.dart';
 
@@ -41,7 +31,7 @@ class AppEventNotifier extends _$AppEventNotifier {
   /// each made them 75% of a 297 MB flutter.log, which is what pushed issue
   /// reports past their attachment budget so users could not send logs at all.
   /// Per-event diagnostics are available at the opt-in trace level.
-  static const _highVolumeEvents = {'peer-connection', 'data-cap-event'};
+  static const _highVolumeEvents = {'peer-connection'};
 
   /// Watches for application events and triggers appropriate actions.
   /// Currently, it listens for 'config' and server-location events.
@@ -58,51 +48,9 @@ class AppEventNotifier extends _$AppEventNotifier {
       }
       switch (eventType) {
         case 'config':
-          ref
-              .read(availableServersProvider.notifier)
-              .forceFetchAvailableServers();
-
-          break;
         case 'server-location':
-          // The selected server event is also our current Lantern-only signal
-          // that Smart Location probe data may have changed.
-          unawaited(
-            ref
-                .read(availableServersProvider.notifier)
-                .forceFetchAvailableServers(),
-          );
-          // Only consume this event when the user is actually in auto mode.
-          // Otherwise (custom server selected) ignore it — applying it would
-          // silently flip the user's selection back to Smart Location on
-          // routing-mode changes or any other tunnel rebuild.
-
-          final currentLocation = ref.read(serverLocationProvider);
-          if (currentLocation.serverType != ServerLocationType.auto.name) {
-            break;
-          }
-          try {
-            final autoLocation = Server.fromJson(jsonDecode(event.message));
-            final countryName = autoLocation.location.country;
-            final cityName = autoLocation.location.city;
-            final autoServer = ServerLocation(
-              serverType: ServerLocationType.auto.name,
-              serverName: ''.i18n,
-              displayName: '',
-              protocol: '',
-              city: cityName,
-              autoLocation: AutoLocation(
-                countryCode: autoLocation.location.countryCode,
-                country: countryName,
-                displayName: '$countryName - $cityName',
-                tag: autoLocation.tag,
-              ),
-            );
-            ref
-                .read(serverLocationProvider.notifier)
-                .updateServerLocation(autoServer);
-          } catch (e) {
-            appLogger.error('Error parsing server-location event: $e');
-          }
+          // Official configuration and location events are intentionally
+          // ignored. Self-hosted servers are managed locally by the app.
           break;
         case 'country-code':
           ref.read(countryCodeProvider.notifier).update(event.message);
@@ -110,17 +58,6 @@ class AppEventNotifier extends _$AppEventNotifier {
         case 'user-data':
           // Go refreshed user data from the server; re-read the cache.
           unawaited(ref.read(homeProvider.notifier).reloadUserData());
-          break;
-        case 'data-cap-event':
-          try {
-            final data = event.message;
-            final dataCapInfo = DataCapUsageResponse.fromJson(jsonDecode(data));
-            ref
-                .read(dataCapInfoProvider.notifier)
-                .updateDataCapInfo(dataCapInfo);
-          } catch (e) {
-            appLogger.error('Error parsing data-cap-event: $e');
-          }
           break;
         default:
           break;

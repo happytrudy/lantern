@@ -20,13 +20,15 @@ class LocalStorageService {
   static const _plansKey = 'plans_json';
   static const _developerModeKey = 'developer_mode_json';
   static const _serverLocationKey = 'server_location_json';
+  static const _privateServersKey = 'private_servers_json';
   static const _seenReferralsKey = 'seen_converted_referrals';
   static const _seenBypassAppDialogKey = 'seen_bypass_app_dialog';
   static const _seenBypassWebsiteDialogKey = 'seen_bypass_website_dialog';
 
   Future<void> init() async {
     _prefs = await SharedPreferencesWithCache.create(
-        cacheOptions: SharedPreferencesWithCacheOptions());
+      cacheOptions: SharedPreferencesWithCacheOptions(),
+    );
   }
 
   // ── AppSetting ────────────────────────────────────────────────────────────
@@ -87,6 +89,63 @@ class LocalStorageService {
     await setString(_serverLocationKey, jsonEncode(location.toJson()));
   }
 
+  List<Map<String, dynamic>> getPrivateServers() {
+    final raw = getString(_privateServersKey);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .where((item) => (item['tag'] ?? '').toString().isNotEmpty)
+            .toList();
+      }
+    } catch (e, st) {
+      appLogger.error('Failed to parse stored private servers', e, st);
+    }
+    return [];
+  }
+
+  Future<void> savePrivateServer({
+    required String tag,
+    String name = '',
+    String protocol = '',
+    String ip = '',
+    String port = '',
+  }) async {
+    final servers = getPrivateServers();
+    final index = servers.indexWhere((item) => item['tag'] == tag);
+    final value = <String, dynamic>{
+      'tag': tag,
+      'name': name.isEmpty ? tag : name,
+      'protocol': protocol,
+      'ip': ip,
+      'port': port,
+    };
+    if (index >= 0) {
+      servers[index] = {...servers[index], ...value};
+    } else {
+      servers.add(value);
+    }
+    await setString(_privateServersKey, jsonEncode(servers));
+  }
+
+  Future<void> removePrivateServer(String tag) async {
+    final servers = getPrivateServers()
+        .where((item) => item['tag'] != tag)
+        .toList();
+    await setString(_privateServersKey, jsonEncode(servers));
+  }
+
+  Future<void> renamePrivateServer(String oldTag, String newName) async {
+    final servers = getPrivateServers();
+    final index = servers.indexWhere((item) => item['tag'] == oldTag);
+    if (index < 0) return;
+    servers[index] = {...servers[index], 'name': newName};
+    await setString(_privateServersKey, jsonEncode(servers));
+  }
+
   // ── DeveloperMode ─────────────────────────────────────────────────────────
 
   DeveloperMode? getDeveloperMode() {
@@ -118,8 +177,7 @@ class LocalStorageService {
 
   /// Whether the one-time "Bypass the VPN for this app?" explainer was already
   /// shown when adding an app to the bypass list.
-  bool get hasSeenBypassAppDialog =>
-      getBool(_seenBypassAppDialogKey) ?? false;
+  bool get hasSeenBypassAppDialog => getBool(_seenBypassAppDialogKey) ?? false;
 
   Future<void> markBypassAppDialogSeen() =>
       setBool(_seenBypassAppDialogKey, true);
@@ -173,9 +231,7 @@ class LocalStorageService {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is Map) {
-        return decoded.map(
-          (k, v) => MapEntry(k.toString(), v.toString()),
-        );
+        return decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
       }
       appLogger.warning('Stored map at "$key" had invalid shape; clearing');
     } catch (e, st) {

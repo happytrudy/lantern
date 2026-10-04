@@ -5,6 +5,7 @@ import 'package:lantern/core/common/common.dart';
 import 'package:lantern/core/widgets/split_tunneling_tile.dart';
 import 'package:lantern/core/widgets/switch_button.dart';
 import 'package:lantern/features/home/provider/radiance_settings_providers.dart';
+import 'package:lantern/features/home/provider/app_setting_notifier.dart';
 
 @RoutePage(name: 'VPNSetting')
 class VPNSetting extends HookConsumerWidget {
@@ -28,8 +29,8 @@ class VPNSetting extends HookConsumerWidget {
     final routingMode = ref.watch(
       radianceSettingsProvider.select((s) => s.routingMode),
     );
-    final blockAds = ref.watch(
-      radianceSettingsProvider.select((s) => s.blockAds),
+    final autoConnectOnStartup = ref.watch(
+      appSettingProvider.select((s) => s.autoConnectOnStartup),
     );
     return ListView(
       key: const Key('vpn_setting.list'),
@@ -51,6 +52,23 @@ class VPNSetting extends HookConsumerWidget {
                 onPressed: () {
                   appRouter.push(const ServerSelection());
                 },
+              ),
+              DividerSpace(),
+              AppTile(
+                label: '启动自动连接',
+                subtitle: Text(
+                  '连接上次使用的自建服务器；智能路由选择最低延迟节点',
+                  style: textTheme.labelMedium!.copyWith(
+                    color: context.textTertiary,
+                  ),
+                ),
+                icon: AppImagePaths.vpnDisconnected,
+                trailing: SwitchButton(
+                  value: autoConnectOnStartup,
+                  onChanged: (value) => ref
+                      .read(appSettingProvider.notifier)
+                      .setAutoConnectOnStartup(value ?? false),
+                ),
               ),
               if (!PlatformUtils.isIOS) ...[
                 DividerSpace(),
@@ -75,42 +93,6 @@ class VPNSetting extends HookConsumerWidget {
                 DividerSpace(),
               ],
             ],
-          ),
-        ),
-        SizedBox(height: 16),
-        AppCard(
-          padding: EdgeInsets.zero,
-          child: AppTile(
-            label: 'block_ads'.i18n,
-            subtitle: Text(
-              'only_active'.i18n,
-              style: textTheme.labelMedium!.copyWith(
-                color: context.textTertiary,
-                letterSpacing: 0.0,
-              ),
-            ),
-            icon: AppImagePaths.blockAds,
-            trailing: SwitchButton(
-              value: blockAds,
-              onChanged: (bool? value) {
-                if (!isUserPro) {
-                  appRouter.push(Plans());
-                  return;
-                }
-                ref
-                    .read(radianceSettingsProvider.notifier)
-                    .setBlockAds(value ?? false);
-              },
-            ),
-            onPressed: () {
-              if (!isUserPro) {
-                appRouter.push(Plans());
-                return;
-              }
-              ref
-                  .read(radianceSettingsProvider.notifier)
-                  .setBlockAds(!blockAds);
-            },
           ),
         ),
         // The "Share My Connection" entry that used to push a SmC

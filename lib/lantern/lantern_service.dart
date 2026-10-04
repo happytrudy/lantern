@@ -5,7 +5,6 @@ import 'package:lantern/core/models/app_data.dart';
 import 'package:lantern/core/models/app_event.dart';
 import 'package:lantern/core/models/datacap_info.dart';
 import 'package:lantern/core/models/lantern_status.dart';
-import 'package:lantern/core/models/server_location.dart';
 import 'package:lantern/core/models/macos_extension_state.dart';
 import 'package:lantern/core/models/plan_data.dart';
 import 'package:lantern/core/models/referral_attach_response.dart';
@@ -20,7 +19,6 @@ import 'package:lantern/core/models/user.dart';
 import 'package:lantern/core/models/user_message.dart';
 
 import '../core/common/common.dart' hide DeveloperMode;
-import '../core/models/available_servers.dart';
 
 ///LanternService is wrapper around native and ffi services
 /// all communication happens here
@@ -57,14 +55,6 @@ class LanternService implements LanternCoreService {
       return _ffiService.startVPN();
     }
     return _platformService.startVPN();
-  }
-
-  @override
-  Future<bool> isTagAvailable(String tag) {
-    if (PlatformUtils.isFFISupported) {
-      return _ffiService.isTagAvailable(tag);
-    }
-    return _platformService.isTagAvailable(tag);
   }
 
   @override
@@ -741,14 +731,6 @@ class LanternService implements LanternCoreService {
   }
 
   @override
-  Future<Either<Failure, AvailableServers>> getLanternAvailableServers() {
-    if (PlatformUtils.isFFISupported) {
-      return _ffiService.getLanternAvailableServers();
-    }
-    return _platformService.getLanternAvailableServers();
-  }
-
-  @override
   Future<Either<Failure, String>> deviceRemove({required String deviceId}) {
     if (PlatformUtils.isFFISupported) {
       return _ffiService.deviceRemove(deviceId: deviceId);
@@ -796,22 +778,6 @@ class LanternService implements LanternCoreService {
       return _ffiService.startChangeEmail(newEmail, password);
     }
     return _platformService.startChangeEmail(newEmail, password);
-  }
-
-  @override
-  Future<Either<Failure, Server>> getAutoServerLocation() {
-    if (PlatformUtils.isFFISupported) {
-      return _ffiService.getAutoServerLocation();
-    }
-    return _platformService.getAutoServerLocation();
-  }
-
-  @override
-  Future<Either<Failure, ServerLocation>> getSelectedServerLocation() {
-    if (PlatformUtils.isFFISupported) {
-      return _ffiService.getSelectedServerLocation();
-    }
-    return _platformService.getSelectedServerLocation();
   }
 
   @override

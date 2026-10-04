@@ -147,6 +147,32 @@ class Home extends HookConsumerWidget {
       return null;
     }, const []);
 
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!context.mounted) return;
+        final settings = ref.read(appSettingProvider);
+        if (!settings.autoConnectOnStartup || !settings.onboardingCompleted) {
+          return;
+        }
+        final location = ref.read(serverLocationProvider);
+        if (location.serverType.toServerLocationType !=
+                ServerLocationType.privateServer ||
+            location.serverName.isEmpty) {
+          appLogger.info(
+            'Startup connection skipped: no self-hosted server is selected.',
+          );
+          return;
+        }
+        await ref
+            .read(vpnProvider.notifier)
+            .connectToServer(
+              ServerLocationType.privateServer,
+              location.serverName,
+            );
+      });
+      return null;
+    }, const []);
+
     ref.read(appEventProvider);
 
     // Reconcile the share UI with the backend before anything reads its
@@ -254,7 +280,7 @@ class Home extends HookConsumerWidget {
                   userLoggedIn: userSignedIn,
                 );
               },
-            )
+            ),
         ],
         // Tab strip collapses when Unbounded is unavailable — either the
         // server flag is off (censored region) or the user hid the tab

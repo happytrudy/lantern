@@ -4717,28 +4717,6 @@ class LanternBindings {
   late final _getAppDataDir = _getAppDataDirPtr
       .asFunction<ffi.Pointer<ffi.Char> Function()>();
 
-  ffi.Pointer<ffi.Char> getAutoLocation() {
-    return _getAutoLocation();
-  }
-
-  late final _getAutoLocationPtr =
-      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
-        'getAutoLocation',
-      );
-  late final _getAutoLocation = _getAutoLocationPtr
-      .asFunction<ffi.Pointer<ffi.Char> Function()>();
-
-  ffi.Pointer<ffi.Char> getAvailableServers() {
-    return _getAvailableServers();
-  }
-
-  late final _getAvailableServersPtr =
-      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
-        'getAvailableServers',
-      );
-  late final _getAvailableServers = _getAvailableServersPtr
-      .asFunction<ffi.Pointer<ffi.Char> Function()>();
-
   ffi.Pointer<ffi.Char> getDataCapInfo() {
     return _getDataCapInfo();
   }
@@ -4801,17 +4779,6 @@ class LanternBindings {
         'getPeerStatusJSON',
       );
   late final _getPeerStatusJSON = _getPeerStatusJSONPtr
-      .asFunction<ffi.Pointer<ffi.Char> Function()>();
-
-  ffi.Pointer<ffi.Char> getSelectedServerJSON() {
-    return _getSelectedServerJSON();
-  }
-
-  late final _getSelectedServerJSONPtr =
-      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Char> Function()>>(
-        'getSelectedServerJSON',
-      );
-  late final _getSelectedServerJSON = _getSelectedServerJSONPtr
       .asFunction<ffi.Pointer<ffi.Char> Function()>();
 
   ffi.Pointer<ffi.Char> getSettings() {
@@ -4998,19 +4965,6 @@ class LanternBindings {
       );
   late final _isSplitTunnelingEnabled = _isSplitTunnelingEnabledPtr
       .asFunction<int Function()>();
-
-  ffi.Pointer<ffi.Char> isTagAvailable(ffi.Pointer<ffi.Char> _tag) {
-    return _isTagAvailable(_tag);
-  }
-
-  late final _isTagAvailablePtr =
-      _lookup<
-        ffi.NativeFunction<
-          ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>)
-        >
-      >('isTagAvailable');
-  late final _isTagAvailable = _isTagAvailablePtr
-      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>)>();
 
   int isTelemetryEnabled() {
     return _isTelemetryEnabled();

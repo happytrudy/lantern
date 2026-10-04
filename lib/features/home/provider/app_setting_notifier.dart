@@ -106,6 +106,9 @@ class AppSettingNotifier extends _$AppSettingNotifier {
     if (value) unawaited(_writeInitMarker());
   }
 
+  void setAutoConnectOnStartup(bool value) =>
+      update(state.copyWith(autoConnectOnStartup: value));
+
   void setUnboundedAutoEnable(bool value) =>
       update(state.copyWith(unboundedAutoEnable: value));
 

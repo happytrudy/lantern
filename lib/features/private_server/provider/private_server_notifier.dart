@@ -4,6 +4,8 @@ import 'package:fpdart/fpdart.dart';
 import 'package:lantern/core/common/app_eum.dart';
 import 'package:lantern/core/models/private_server_status.dart';
 import 'package:lantern/core/utils/failure.dart';
+import 'package:lantern/core/services/injection_container.dart' show sl;
+import 'package:lantern/core/services/local_storage_service.dart';
 import 'package:lantern/lantern/lantern_service_notifier.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -21,7 +23,8 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
     watchPrivateServerLogs();
     ref.onDispose(() {
       appLogger.debug(
-          'Disposing PrivateServerNotifier and cancelling subscriptions.');
+        'Disposing PrivateServerNotifier and cancelling subscriptions.',
+      );
       _privateServerStatusSub?.cancel();
     });
     return PrivateServerStatus(status: 'initial', data: null, error: null);
@@ -41,15 +44,18 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
   }
 
   Future<Either<Failure, Unit>> setUserInput(
-      PrivateServerInput method, String input) async {
-    return ref.read(lanternServiceProvider).setUserInput(
-          methodType: method,
-          input: input,
-        );
+    PrivateServerInput method,
+    String input,
+  ) async {
+    return ref
+        .read(lanternServiceProvider)
+        .setUserInput(methodType: method, input: input);
   }
 
   Future<Either<Failure, Unit>> startDeployment(
-      String location, String serverName) async {
+    String location,
+    String serverName,
+  ) async {
     return ref
         .read(lanternServiceProvider)
         .startDeployment(location: location, serverName: serverName);
@@ -60,21 +66,47 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
   }
 
   Future<Either<Failure, Unit>> addServerManually(
-      String ip, String port, String accessToken, String serverName) async {
-    return ref.read(lanternServiceProvider).addServerManually(
+    String ip,
+    String port,
+    String accessToken,
+    String serverName,
+  ) async {
+    final result = await ref
+        .read(lanternServiceProvider)
+        .addServerManually(
           ip: ip,
           port: port,
           accessToken: accessToken,
           serverName: serverName,
         );
+    if (result.isRight()) {
+      await sl<LocalStorageService>().savePrivateServer(
+        tag: serverName,
+        name: serverName,
+        ip: ip,
+        port: port,
+      );
+    }
+    return result;
   }
 
   Future<Either<Failure, List<String>>> addServerBasedOnURLs(
-      String urls, bool skipCertVerification) async {
-    return ref.read(lanternServiceProvider).addServerBasedOnURLs(
+    String urls,
+    bool skipCertVerification,
+  ) async {
+    final result = await ref
+        .read(lanternServiceProvider)
+        .addServerBasedOnURLs(
           urls: urls,
           skipCertVerification: skipCertVerification,
         );
+    if (result.isRight()) {
+      final tags = result.getRight().toNullable() ?? const <String>[];
+      for (final tag in tags) {
+        await sl<LocalStorageService>().savePrivateServer(tag: tag);
+      }
+    }
+    return result;
   }
 
   void watchPrivateServerLogs() {
@@ -101,8 +133,11 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
         ///Send dummy status to reset once browser is open
         /// so user can close and open it again if needed
         Future.delayed(const Duration(milliseconds: 500), () {
-          state =
-              PrivateServerStatus(status: 'initial', data: null, error: null);
+          state = PrivateServerStatus(
+            status: 'initial',
+            data: null,
+            error: null,
+          );
         });
         break;
       case 'EventTypeAccounts':
@@ -144,8 +179,18 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
   }
 
   Future<Either<Failure, String>> inviteToServerManagerInstance(
-      String ip, String port, String accessToken, String inviteName) async {
-    return ref.read(lanternServiceProvider).inviteToServerManagerInstance(
-        ip: ip, port: port, accessToken: accessToken, inviteName: inviteName);
+    String ip,
+    String port,
+    String accessToken,
+    String inviteName,
+  ) async {
+    return ref
+        .read(lanternServiceProvider)
+        .inviteToServerManagerInstance(
+          ip: ip,
+          port: port,
+          accessToken: accessToken,
+          inviteName: inviteName,
+        );
   }
 }

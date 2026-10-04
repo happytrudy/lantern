@@ -193,8 +193,6 @@ class VpnNotifier extends _$VpnNotifier {
     bool force = false,
     bool skipConflictCheck = false,
   }) async {
-    final lantern = ref.read(lanternServiceProvider);
-
     if (!skipConflictCheck) {
       final conflict = await _checkVpnConflict();
       if (conflict != null) return conflict;
@@ -204,19 +202,29 @@ class VpnNotifier extends _$VpnNotifier {
 
     final type = serverLocation.serverType.toServerLocationType;
     if (type == ServerLocationType.auto || force) {
-      appLogger.debug(
-        'Got server location with type auto or force is true, starting VPN with auto',
+      appLogger.info(
+        'Connection aborted: no self-hosted server is selected; official '
+        'automatic routing is disabled.',
       );
-      return lantern.startVPN();
+      return Left(
+        Failure(
+          error: 'self_hosted_server_required',
+          localizedErrorMessage: '请先添加并选择自建服务器'.i18n,
+        ),
+      );
     }
 
     final tag = serverLocation.serverName;
-    final tagAvailable = await lantern.isTagAvailable(tag);
-    if (!tagAvailable) {
-      appLogger.debug(
-        'Server tag "$tag" not available, falling back to auto VPN',
+    if (tag.isEmpty) {
+      appLogger.info(
+        'Connection aborted: selected self-hosted server tag is empty.',
       );
-      return lantern.startVPN();
+      return Left(
+        Failure(
+          error: 'self_hosted_server_unavailable',
+          localizedErrorMessage: '自建服务器不可用，请重新添加'.i18n,
+        ),
+      );
     }
     return connectToServer(type, tag, skipConflictCheck: skipConflictCheck);
   }

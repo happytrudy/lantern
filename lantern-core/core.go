@@ -37,9 +37,6 @@ import (
 type EventType = string
 
 const (
-	EventTypeServerLocation EventType = "server-location"
-	EventTypeConfig         EventType = "config"
-	EventTypeCountryCode    EventType = "country-code"
 	// EventTypePeerConnection signals a peer accept/close on the local
 	// peer-share inbound. Both donor protocols emit this event type:
 	// samizdat-over-UPnP "Share My Connection" and broflake
@@ -99,12 +96,7 @@ type App interface {
 	) error
 	IsRadianceConnected() bool
 	IsVPNRunning() (bool, error)
-	GetAvailableServers() []byte
 	MyDeviceId() string
-	GetServerByTagJSON(tag string) ([]byte, bool, error)
-	GetSelectedServerJSON() ([]byte, error)
-	GetSelectedServerTag() (string, error)
-	GetAutoLocationJSON() ([]byte, error)
 	CheckDaemonReachable() error
 	PatchSettings(settings.Settings) error
 	GetSettingsJSON() ([]byte, error)
@@ -318,9 +310,6 @@ func (lc *LanternCore) initialize(opts *utils.Opts, eventEmitter utils.FlutterEv
 	lc.cancel = cancel
 	lc.eventEmitter = eventEmitter
 
-	go lc.listenAutoSelectedEvents()
-	go lc.listenConfigEvents()
-	go lc.listenDataCapEvents()
 	go lc.listenPeerConnectionEvents()
 	go lc.listenUnboundedSnapshots()
 	go lc.listenPeerStatusEvents()
@@ -396,67 +385,6 @@ func userIDAsInt64(v any) int64 {
 		return n
 	}
 	return 0
-}
-
-// listenAutoSelectedEvents listens for auto-selected server changes from the IPC client and forwards
-// them to Flutter. Blocks until lc.ctx is cancelled.
-func (lc *LanternCore) listenAutoSelectedEvents() {
-	err := lc.client.AutoSelectedEvents(lc.ctx, func(evt vpn.AutoSelectedEvent) {
-		tag := strings.TrimSpace(evt.Selected)
-		if tag == "" {
-			slog.Debug("auto-selected server not available yet")
-			return
-		}
-		server, found, err := lc.client.GetServerByTag(lc.ctx, tag)
-		if err != nil || !found {
-			slog.Error("no server found with tag", "tag", tag, "error", err)
-			return
-		}
-		jsonBytes, err := json.Marshal(server)
-		if err != nil {
-			slog.Error("Error marshalling server location", "error", err)
-			return
-		}
-		slog.Debug("Auto location server:", "server", string(jsonBytes))
-		lc.notifyFlutter(EventTypeServerLocation, string(jsonBytes))
-	})
-	if err != nil && lc.ctx.Err() == nil {
-		slog.Error("auto-selected event stream exited unexpectedly", "error", err)
-	}
-}
-
-// listenConfigEvents listens for config updates from the IPC client and notifies Flutter when they
-// occur. Blocks until lc.ctx is cancelled.
-func (lc *LanternCore) listenConfigEvents() {
-	err := lc.client.ConfigEvents(lc.ctx, func() {
-		slog.Debug("Config updated, notifying Flutter")
-		lc.notifyFlutter(EventTypeConfig, "")
-		// Forward the country from the latest config fetch.
-		countryCode, _ := lc.settings()[settings.CountryCodeKey].(string)
-		if countryCode != "" {
-			slog.Debug("Config event: country code updated", "countryCode", countryCode)
-			lc.notifyFlutter(EventTypeCountryCode, countryCode)
-		}
-	})
-	if err != nil && lc.ctx.Err() == nil {
-		slog.Error("config event stream exited unexpectedly", "error", err)
-	}
-}
-
-// listenDataCapEvents listens for DataCapInfo updates from the IPC client and forwards them to Flutter.
-// Blocks until lc.ctx is cancelled.
-func (lc *LanternCore) listenDataCapEvents() {
-	err := lc.client.DataCapStream(lc.ctx, func(info account.DataCapInfo) {
-		jsonBytes, err := json.Marshal(info)
-		if err != nil {
-			slog.Error("Error marshalling DataCap event", "error", err)
-			return
-		}
-		lc.notifyFlutter("data-cap-event", string(jsonBytes))
-	})
-	if err != nil && lc.ctx.Err() == nil {
-		slog.Error("datacap event stream exited unexpectedly", "error", err)
-	}
 }
 
 // listenPeerConnectionEvents forwards inbound accept/close events from
@@ -789,42 +717,6 @@ func (lc *LanternCore) AvailableFeatures() []byte {
 	return jsonBytes
 }
 
-func (lc *LanternCore) GetAvailableServers() []byte {
-	data, err := lc.client.ServersJSON(lc.ctx)
-	if err != nil {
-		slog.Error("Error getting servers", "error", err)
-		return nil
-	}
-	return data
-}
-
-func (lc *LanternCore) GetServerByTagJSON(tag string) ([]byte, bool, error) {
-	return lc.client.GetServerByTagJSON(lc.ctx, tag)
-}
-
-func (lc *LanternCore) GetSelectedServerJSON() ([]byte, error) {
-	return lc.client.SelectedServerJSON(lc.ctx)
-}
-
-func (lc *LanternCore) GetSelectedServerTag() (string, error) {
-	server, exists, err := lc.client.SelectedServer(lc.ctx)
-	if err != nil {
-		return "", err
-	}
-	if !exists {
-		return "", nil
-	}
-	return server.Tag, nil
-}
-
-func (lc *LanternCore) GetAutoLocationJSON() ([]byte, error) {
-	server, err := lc.client.AutoSelected(lc.ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get auto location: %w", err)
-	}
-	return json.Marshal(server)
-}
-
 func (lc *LanternCore) CheckDaemonReachable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
@@ -866,7 +758,9 @@ func (lc *LanternCore) RunOfflineURLTests() error {
 }
 
 func (lc *LanternCore) UpdateConfig() error {
-	return lc.client.UpdateConfig(lc.ctx)
+	// Pure self-hosted builds never refresh the official configuration or
+	// server catalog. Self-hosted entries are added explicitly by the user.
+	return nil
 }
 
 func (lc *LanternCore) ClearTunnelCache() error {

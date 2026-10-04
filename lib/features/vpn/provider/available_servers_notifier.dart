@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:fpdart/fpdart.dart';
 import 'package:lantern/core/common/common.dart';
 import 'package:lantern/core/models/available_servers.dart';
+import 'package:lantern/core/services/injection_container.dart' show sl;
+import 'package:lantern/core/services/local_storage_service.dart';
 import 'package:lantern/lantern/lantern_service_notifier.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -30,8 +34,52 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
 
   /// Fetches the available servers from the Lantern.
   Future<Either<Failure, AvailableServers>> fetchAvailableServers() async {
-    appLogger.debug('Fetching available servers from Lantern...');
-    return await ref.read(lanternServiceProvider).getLanternAvailableServers();
+    final local = sl<LocalStorageService>().getPrivateServers();
+    final servers = await Future.wait(
+      local.map((item) async {
+        final tag = item['tag'].toString();
+        final name = (item['name'] ?? tag).toString();
+        final ip = (item['ip'] ?? '').toString();
+        final port = int.tryParse((item['port'] ?? '').toString()) ?? 443;
+        final delay = await _probePrivateServer(ip, port);
+        return Server(
+          tag: tag,
+          type: (item['protocol'] ?? '').toString(),
+          isLantern: false,
+          location: GeoLocation(
+            country: '',
+            countryCode: '',
+            city: name,
+            latitude: 0,
+            longitude: 0,
+          ),
+          credentials: null,
+          selectionHistory: SelectionHistory(
+            lastSuccessDelayMs: delay ?? 0,
+            consecutiveFailures: delay == null ? 1 : 0,
+          ),
+        );
+      }),
+    );
+    return right(AvailableServers(servers));
+  }
+
+  Future<int?> _probePrivateServer(String ip, int port) async {
+    if (ip.isEmpty || port <= 0 || port > 65535) return null;
+    final stopwatch = Stopwatch()..start();
+    try {
+      final socket = await Socket.connect(
+        ip,
+        port,
+        timeout: const Duration(seconds: 3),
+      );
+      stopwatch.stop();
+      await socket.close();
+      return stopwatch.elapsedMilliseconds;
+    } catch (_) {
+      stopwatch.stop();
+      return null;
+    }
   }
 
   /// Forces a fetch of the available servers and updates the state.
@@ -96,5 +144,4 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
       }
     }
   }
-
 }
