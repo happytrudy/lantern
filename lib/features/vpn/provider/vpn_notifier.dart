@@ -10,6 +10,7 @@ import 'package:lantern/core/services/injection_container.dart';
 import 'package:lantern/core/services/notification_service.dart';
 import 'package:lantern/core/services/rating_prompt_service.dart';
 import 'package:lantern/features/home/provider/app_setting_notifier.dart';
+import 'package:lantern/features/vpn/provider/available_servers_notifier.dart';
 import 'package:lantern/features/vpn/provider/server_location_notifier.dart';
 import 'package:lantern/features/vpn/provider/vpn_status_notifier.dart';
 import 'package:lantern/lantern/lantern_service_notifier.dart';
@@ -202,16 +203,38 @@ class VpnNotifier extends _$VpnNotifier {
 
     final type = serverLocation.serverType.toServerLocationType;
     if (type == ServerLocationType.auto || force) {
-      appLogger.info(
-        'Connection aborted: no self-hosted server is selected; official '
-        'automatic routing is disabled.',
+      // Smart Routing is the auto mode in the pure build. Re-probe every
+      // configured self-hosted server for each connection request, then use
+      // the lowest successful latency without requiring a preselected tag.
+      await ref
+          .read(availableServersProvider.notifier)
+          .forceFetchAvailableServers();
+      final available = ref.read(availableServersProvider).value;
+      if (available == null || !available.hasUserServers) {
+        return Left(
+          Failure(
+            error: 'self_hosted_server_required',
+            localizedErrorMessage: 'no_private_server_setup_yet'.i18n,
+          ),
+        );
+      }
+      final fastest = available.fastestPrivateServer;
+      if (fastest == null) {
+        return Left(
+          Failure(
+            error: 'self_hosted_server_unreachable',
+            localizedErrorMessage: 'private_servers_unreachable'.i18n,
+          ),
+        );
+      }
+
+      final result = await connectToServer(
+        ServerLocationType.privateServer,
+        fastest.tag,
+        // The VPN conflict check already ran at the start of startVPN.
+        skipConflictCheck: true,
       );
-      return Left(
-        Failure(
-          error: 'self_hosted_server_required',
-          localizedErrorMessage: '请先添加并选择自建服务器'.i18n,
-        ),
-      );
+      return result;
     }
 
     final tag = serverLocation.serverName;

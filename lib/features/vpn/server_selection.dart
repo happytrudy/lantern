@@ -260,18 +260,10 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
         }
       },
       (_) async {
-        ref
-            .read(serverLocationProvider.notifier)
-            .updateServerLocation(
-              ServerLocation(
-                serverType: ServerLocationType.privateServer.name,
-                serverName: fastest.tag,
-                country: fastest.location.country,
-                city: fastest.location.city,
-                countryCode: fastest.location.countryCode,
-                protocol: fastest.type,
-              ),
-            );
+        // Keep Smart Routing selected after connecting. The next connection
+        // must probe all self-hosted servers again instead of pinning this
+        // result as a manual server.
+        await ref.read(serverLocationProvider.notifier).switchToAuto();
         appRouter.popUntilRoot();
       },
     );

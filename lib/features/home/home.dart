@@ -156,8 +156,12 @@ class Home extends HookConsumerWidget {
           return;
         }
         final location = ref.read(serverLocationProvider);
-        if (location.serverType.toServerLocationType !=
-                ServerLocationType.privateServer ||
+        final locationType = location.serverType.toServerLocationType;
+        if (locationType == ServerLocationType.auto) {
+          await ref.read(vpnProvider.notifier).startVPN();
+          return;
+        }
+        if (locationType != ServerLocationType.privateServer ||
             location.serverName.isEmpty) {
           appLogger.info(
             'Startup connection skipped: no self-hosted server is selected.',
