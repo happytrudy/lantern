@@ -161,6 +161,14 @@ class Server {
   String get serverIP =>
       outbound?['server'] as String? ?? endpoint?['server'] as String? ?? '';
 
+  /// Protocol type, with compatibility fallbacks for server-manager payloads
+  /// that put the type inside the selected outbound/endpoint object.
+  String get protocol {
+    if (type.trim().isNotEmpty) return type.trim();
+    final nested = outbound?['type'] ?? endpoint?['type'];
+    return nested?.toString().trim() ?? '';
+  }
+
   bool get hasSuccessfulProbe =>
       (selectionHistory?.lastSuccessDelayMs ?? 0) > 0;
 

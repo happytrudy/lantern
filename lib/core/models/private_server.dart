@@ -83,7 +83,7 @@ class PrivateServer {
         accessToken: (e['access_token'] ?? '').toString(),
         serverLocationName: (e['location'] ?? '').toString(),
         serverCountryCode: countryCode,
-        protocol: (e['protocol'] ?? '').toString(),
+        protocol: (e['protocol'] ?? e['type'] ?? '').toString(),
         isJoined: (e['is_joined'] ?? false) == true,
         userSelected: (e['user_selected'] ?? false) == true,
       );

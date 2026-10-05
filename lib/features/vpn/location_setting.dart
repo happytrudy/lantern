@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lantern/core/widgets/setting_tile.dart';
 import 'package:lantern/features/vpn/provider/server_location_notifier.dart';
+import 'package:lantern/features/vpn/provider/available_servers_notifier.dart';
 
 import '../../core/common/common.dart';
 
@@ -12,6 +13,7 @@ class LocationSetting extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final serverLocation = ref.watch(serverLocationProvider);
     final serverType = serverLocation.serverType.toServerLocationType;
+    final availableServers = ref.watch(availableServersProvider).value;
 
     String title = '';
     String value = '';
@@ -20,15 +22,19 @@ class LocationSetting extends HookConsumerWidget {
 
     switch (serverType) {
       case ServerLocationType.auto:
-        title = 'smart_location'.i18n;
+        title = 'smart_routing'.i18n;
+        final fastest = availableServers?.fastestPrivateServer;
+        final fallback = availableServers?.userServers.isNotEmpty == true
+            ? availableServers!.userServers.first
+            : null;
+        final selected = fastest ?? fallback;
         final autoLoc = serverLocation.autoLocation;
-
-        value = autoLoc != null && autoLoc.displayName.isNotEmpty
-            ? autoLoc.displayName
-            : 'fastest_server'.i18n;
-
-        flag = autoLoc?.countryCode ?? '';
-        protocol = autoLoc?.protocol ?? '';
+        value = selected?.tag ??
+            (autoLoc != null && autoLoc.displayName.isNotEmpty
+                ? autoLoc.displayName
+                : 'fastest_server'.i18n);
+        flag = selected?.location.countryCode ?? autoLoc?.countryCode ?? '';
+        protocol = selected?.protocol ?? autoLoc?.protocol ?? '';
         break;
 
       case ServerLocationType.lanternLocation:

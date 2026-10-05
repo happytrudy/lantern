@@ -582,10 +582,10 @@ class _CountryCityListViewState extends State<_CountryCityListView> {
               minHeight: 58,
               contentPadding: const EdgeInsets.only(left: 53, right: 14),
               label: server.location.city,
-              subtitle: server.type.isEmpty
+              subtitle: server.protocol.isEmpty
                   ? null
                   : Text(
-                      server.type.capitalize,
+                      server.protocol.capitalize,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelMedium!.copyWith(
@@ -744,7 +744,7 @@ class _PrivateServerLocationListViewState
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       child: Text(
-                        '${server.location.city} - ${server.type}',
+                        '${server.location.city} - ${server.protocol}',
                         style: _textTheme!.labelMedium!.copyWith(
                           color: context.textTertiary,
                         ),
@@ -802,7 +802,7 @@ class _PrivateServerLocationListViewState
                           country: server.location.country,
                           city: server.location.city,
                           countryCode: server.location.countryCode,
-                          protocol: server.type,
+                          protocol: server.protocol,
                         ),
                       );
                   appRouter.popUntilRoot();
@@ -827,7 +827,7 @@ class _PrivateServerLocationListViewState
                 country: server.location.country,
                 city: server.location.city,
                 countryCode: server.location.countryCode,
-                protocol: server.type,
+                protocol: server.protocol,
               ),
             );
         appRouter.popUntilRoot();

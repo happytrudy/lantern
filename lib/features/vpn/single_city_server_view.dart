@@ -33,10 +33,10 @@ class _SingleCityServerViewState extends State<SingleCityServerView> {
           ? widget.server.location.city
           : '${widget.server.location.country} - ${widget.server.location.city}',
       selected: widget.isSelected,
-      subtitle: widget.server.type.isEmpty
+      subtitle: widget.server.protocol.isEmpty
           ? null
           : Text(
-              widget.server.type.capitalize,
+              widget.server.protocol.capitalize,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: textTheme.labelMedium!.copyWith(

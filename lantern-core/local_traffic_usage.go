@@ -17,13 +17,15 @@ const localTrafficUsageFile = "local_traffic_usage.json"
 // localTrafficUsage is the device-local daily traffic counter. It deliberately
 // has no allotment or enforcement logic: bytes are only displayed to the user.
 type localTrafficUsage struct {
-	mu       sync.Mutex
-	path     string
-	client   *ipc.Client
-	ctx      context.Context
-	day      string
-	bytes    int64
-	sessions map[string]int64
+	mu                sync.Mutex
+	path              string
+	client            *ipc.Client
+	ctx               context.Context
+	day               string
+	bytes             int64
+	sessions          map[string]int64
+	lastThroughputAt time.Time
+	sessionBytesSeen bool
 }
 
 type localTrafficUsageFileData struct {
@@ -91,9 +93,11 @@ func (u *localTrafficUsage) refresh() {
 	if u == nil || u.client == nil {
 		return
 	}
-	sessions, err := u.client.VPNSessions(u.ctx, 0)
-	if err != nil {
-		return
+	sessions, sessionsErr := u.client.VPNSessions(u.ctx, 0)
+	if sessionsErr != nil {
+		// Older daemons may not expose session history. The throughput endpoint
+		// below still provides a live byte-rate fallback in that case.
+		sessions = nil
 	}
 	now := time.Now()
 	u.mu.Lock()
@@ -103,16 +107,40 @@ func (u *localTrafficUsage) refresh() {
 		u.day = day
 		u.bytes = 0
 		u.sessions = make(map[string]int64)
+		u.lastThroughputAt = time.Time{}
+		u.sessionBytesSeen = false
 	}
 	seen := make(map[string]int64, len(sessions))
+	hasSessionBytes := false
 	for _, session := range sessions {
 		key := session.ConnectedAt.UTC().Format(time.RFC3339Nano) + "|" + session.Server.Tag
 		total := maxInt64(session.BytesUp, 0) + maxInt64(session.BytesDown, 0)
+		if total > 0 {
+			hasSessionBytes = true
+		}
 		previous := u.sessions[key]
 		if total > previous {
 			u.bytes += total - previous
 		}
 		seen[key] = total
+	}
+	if hasSessionBytes {
+		u.sessionBytesSeen = true
+	} else if !u.sessionBytesSeen {
+		// Some daemon versions expose the live session before its byte fields
+		// are sampled. Accumulate the live throughput rate until session bytes
+		// become available, so the display is useful immediately after connect.
+		throughput, throughputErr := u.client.VPNThroughput(u.ctx)
+		if throughputErr == nil {
+			if !u.lastThroughputAt.IsZero() {
+				elapsed := now.Sub(u.lastThroughputAt).Seconds()
+				if elapsed > 0 && elapsed < 60 {
+					bitsPerSecond := maxInt64(throughput.Global.Up, 0) + maxInt64(throughput.Global.Down, 0)
+					u.bytes += int64(float64(bitsPerSecond) * elapsed / 8)
+				}
+			}
+			u.lastThroughputAt = now
+		}
 	}
 	// Retain only sessions still reported by the daemon. This keeps the state
 	// bounded while the persisted byte total remains durable across restarts.

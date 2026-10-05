@@ -121,11 +121,15 @@ class LocalStorageService {
     final value = <String, dynamic>{
       'tag': tag,
       'name': name.isEmpty ? tag : name,
-      'protocol': protocol,
       'ip': ip,
       'port': port,
       'is_joined': isJoined,
     };
+    // Join/add operations may only provide a tag. Do not erase a protocol
+    // already learned from the server manager's connection configuration.
+    if (protocol.isNotEmpty || index < 0) {
+      value['protocol'] = protocol;
+    }
     // Joining a server may only provide its tag. Preserve an existing owner
     // token when that operation updates the same local entry.
     if (accessToken.isNotEmpty || index < 0) {

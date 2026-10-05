@@ -27,9 +27,7 @@ class DataUsage extends ConsumerWidget {
         appLogger.debug(
           "Data Usage - Bytes: $usedBytes bytes",
         );
-        final int usedData = usedBytes == 0
-            ? 0
-            : (usedBytes / (1024 * 1024)).round();
+        final usedData = usedBytes / (1024 * 1024);
         appLogger.debug(
           "Data Usage - Used: $usedData MB",
         );
@@ -54,7 +52,7 @@ class DataUsage extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '$usedData${'mb'.i18n}',
+                  '${usedData.toStringAsFixed(2)}${'mb'.i18n}',
                   style: textTheme.titleSmall!.copyWith(
                     color: context.textPrimary,
                   ),

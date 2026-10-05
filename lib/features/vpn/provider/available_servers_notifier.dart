@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:fpdart/fpdart.dart';
@@ -45,10 +46,25 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
             (item['access_token'] ?? item['accessToken'] ?? item['token'] ?? '')
                 .toString();
         final isJoined = item['is_joined'] == true;
+        var protocol = (item['protocol'] ?? item['type'] ?? '').toString().trim();
+        if (protocol.isEmpty) {
+          protocol = await _resolvePrivateServerProtocol(
+                ip: ip,
+                port: port,
+                accessToken: accessToken,
+              ) ??
+              '';
+          if (protocol.isNotEmpty) {
+            await sl<LocalStorageService>().savePrivateServer(
+              tag: tag,
+              protocol: protocol,
+            );
+          }
+        }
         final delay = await _probePrivateServer(ip, port);
         return Server(
           tag: tag,
-          type: (item['protocol'] ?? '').toString(),
+          type: protocol,
           isLantern: false,
           location: GeoLocation(
             country: '',
@@ -70,6 +86,49 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
       }),
     );
     return right(AvailableServers(servers));
+  }
+
+  Future<String?> _resolvePrivateServerProtocol({
+    required String ip,
+    required int port,
+    required String accessToken,
+  }) async {
+    if (ip.isEmpty || accessToken.isEmpty || port <= 0 || port > 65535) {
+      return null;
+    }
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 3)
+      ..badCertificateCallback = (_, _, _) => true;
+    try {
+      final uri = Uri(
+        scheme: 'https',
+        host: ip,
+        port: port,
+        path: '/api/v1/connect-config',
+        queryParameters: {'token': accessToken},
+      );
+      final request = await client.getUrl(uri).timeout(const Duration(seconds: 3));
+      final response = await request.close().timeout(const Duration(seconds: 3));
+      if (response.statusCode != HttpStatus.ok) return null;
+      final body = await response.transform(utf8.decoder).join();
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) return null;
+      final outbounds = decoded['outbounds'];
+      if (outbounds is List && outbounds.isNotEmpty && outbounds.first is Map) {
+        final type = (outbounds.first['type'] ?? '').toString().trim();
+        if (type.isNotEmpty) return type;
+      }
+      final endpoints = decoded['endpoints'];
+      if (endpoints is List && endpoints.isNotEmpty && endpoints.first is Map) {
+        final type = (endpoints.first['type'] ?? '').toString().trim();
+        if (type.isNotEmpty) return type;
+      }
+    } catch (error) {
+      appLogger.debug('Unable to resolve private server protocol: $error');
+    } finally {
+      client.close(force: true);
+    }
+    return null;
   }
 
   Future<int?> _probePrivateServer(String ip, int port) async {

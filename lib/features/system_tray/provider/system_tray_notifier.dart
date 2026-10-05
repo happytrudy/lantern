@@ -247,8 +247,8 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener {
               items: [
                 // Smart Location as first option with checkmark
                 MenuItem.checkbox(
-                  key: 'smart_location',
-                  label: 'smart_location'.i18n,
+                  key: 'smart_routing',
+                  label: 'smart_routing'.i18n,
                   checked: _isAutoLocation,
                   onClick: (_) => _onSmartLocationSelected(),
                 ),
