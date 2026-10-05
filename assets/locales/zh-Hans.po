@@ -145,6 +145,9 @@ msgstr "分流"
 msgid "server_locations"
 msgstr "服务器位置"
 
+msgid "private_servers_unreachable"
+msgstr "当前无法连接您的自建服务器。"
+
 msgid "startup_auto_connect"
 msgstr "启动时自动连接"
 

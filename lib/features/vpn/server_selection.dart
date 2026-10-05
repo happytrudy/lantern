@@ -224,7 +224,7 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
         .value
         ?.fastestPrivateServer;
     if (fastest == null) {
-      context.showSnackBar('请先添加自建服务器');
+      context.showSnackBar('private_servers_unreachable'.i18n);
       return;
     }
     final result = await ref
@@ -706,7 +706,7 @@ class _PrivateServerLocationListViewState
           const SizedBox(height: 16),
           PrimaryButton(
             label: 'setup_private_server'.i18n,
-            onPressed: () => context.pushRoute(VPNSetting()),
+            onPressed: () => context.pushRoute(ManuallyServerSetup()),
           ),
         ],
       );

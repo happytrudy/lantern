@@ -41,6 +41,10 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
         final name = (item['name'] ?? tag).toString();
         final ip = (item['ip'] ?? '').toString();
         final port = int.tryParse((item['port'] ?? '').toString()) ?? 443;
+        final accessToken =
+            (item['access_token'] ?? item['accessToken'] ?? item['token'] ?? '')
+                .toString();
+        final isJoined = item['is_joined'] == true;
         final delay = await _probePrivateServer(ip, port);
         return Server(
           tag: tag,
@@ -53,7 +57,11 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
             latitude: 0,
             longitude: 0,
           ),
-          credentials: null,
+          credentials: ServerCredential(
+            accessToken: accessToken,
+            isJoined: isJoined,
+            port: port.toString(),
+          ),
           selectionHistory: SelectionHistory(
             lastSuccessDelayMs: delay ?? 0,
             consecutiveFailures: delay == null ? 1 : 0,
@@ -68,9 +76,13 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
     if (ip.isEmpty || port <= 0 || port > 65535) return null;
     final stopwatch = Stopwatch()..start();
     try {
-      final socket = await Socket.connect(
+      // The self-hosted server manager speaks HTTPS. A raw TCP connect followed
+      // by an immediate close is not a valid probe and makes the server log a
+      // TLS handshake EOF for every Smart Routing attempt.
+      final socket = await SecureSocket.connect(
         ip,
         port,
+        onBadCertificate: (_) => true,
         timeout: const Duration(seconds: 3),
       );
       stopwatch.stop();

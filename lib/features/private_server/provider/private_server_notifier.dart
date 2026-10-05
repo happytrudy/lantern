@@ -76,6 +76,7 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
         name: serverName,
         ip: ip,
         port: port,
+        accessToken: accessToken,
       );
     }
     return result;
@@ -94,7 +95,10 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
     if (result.isRight()) {
       final tags = result.getRight().toNullable() ?? const <String>[];
       for (final tag in tags) {
-        await sl<LocalStorageService>().savePrivateServer(tag: tag);
+        await sl<LocalStorageService>().savePrivateServer(
+          tag: tag,
+          isJoined: true,
+        );
       }
     }
     return result;

@@ -113,6 +113,8 @@ class LocalStorageService {
     String protocol = '',
     String ip = '',
     String port = '',
+    String accessToken = '',
+    bool isJoined = false,
   }) async {
     final servers = getPrivateServers();
     final index = servers.indexWhere((item) => item['tag'] == tag);
@@ -122,7 +124,13 @@ class LocalStorageService {
       'protocol': protocol,
       'ip': ip,
       'port': port,
+      'is_joined': isJoined,
     };
+    // Joining a server may only provide its tag. Preserve an existing owner
+    // token when that operation updates the same local entry.
+    if (accessToken.isNotEmpty || index < 0) {
+      value['access_token'] = accessToken;
+    }
     if (index >= 0) {
       servers[index] = {...servers[index], ...value};
     } else {

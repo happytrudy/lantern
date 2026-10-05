@@ -52,13 +52,20 @@ class AvailableServers {
   /// Fastest joined self-hosted server. Official Lantern servers are never
   /// considered by the pure build's smart routing mode.
   Server? get fastestPrivateServer {
-    final ranked = userServers
-        .where((s) => s.hasSuccessfulProbe && !s.isProbedUnreachable)
-        .toList()
-      ..sort((a, b) => a.selectionHistory!.lastSuccessDelayMs.compareTo(
-            b.selectionHistory!.lastSuccessDelayMs,
-          ));
-    return ranked.isEmpty ? null : ranked.first;
+    final ranked =
+        userServers
+            .where((s) => s.hasSuccessfulProbe && !s.isProbedUnreachable)
+            .toList()
+          ..sort(
+            (a, b) => a.selectionHistory!.lastSuccessDelayMs.compareTo(
+              b.selectionHistory!.lastSuccessDelayMs,
+            ),
+          );
+    if (ranked.isNotEmpty) return ranked.first;
+    // With one configured server there is no routing choice to make. Let the
+    // VPN connection perform the authoritative check instead of incorrectly
+    // telling the user to add a server after a transient probe failure.
+    return userServers.length == 1 ? userServers.single : null;
   }
 }
 

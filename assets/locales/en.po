@@ -131,6 +131,9 @@ msgstr "Split Tunneling"
 msgid "server_locations"
 msgstr "Server Locations"
 
+msgid "private_servers_unreachable"
+msgstr "None of your self-hosted servers is reachable right now."
+
 msgid "startup_auto_connect"
 msgstr "Connect automatically at startup"
 

@@ -40,12 +40,6 @@ class QrCodeScanner extends HookConsumerWidget {
       }
     });
 
-    final scanWindow = Rect.fromCenter(
-      center: MediaQuery.sizeOf(context).center(const Offset(0, -100)),
-      width: 300,
-      height: 250,
-    );
-
     Future<void> handleCode(String code) async {
       try {
         appLogger.info('Barcode found'); // QR payload intentionally not logged
@@ -60,50 +54,60 @@ class QrCodeScanner extends HookConsumerWidget {
     return BaseScreen(
       title: 'scan_qr_code'.i18n,
       padded: false,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: MobileScanner(
-              controller: controller,
-              scanWindow: scanWindow,
-              fit: BoxFit.cover,
-              onDetect: (capture) {
-                if (isHandling.value) return;
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final scanWindow = Rect.fromCenter(
+            center: Offset(constraints.maxWidth / 2, constraints.maxHeight / 2),
+            width: constraints.maxWidth.clamp(240.0, 340.0).toDouble(),
+            height: constraints.maxHeight.clamp(180.0, 280.0).toDouble(),
+          );
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: MobileScanner(
+                  controller: controller,
+                  // Do not restrict decoding to the overlay rectangle. A
+                  // device preview can be cropped differently from Flutter's
+                  // layout, which made valid codes appear to do nothing.
+                  fit: BoxFit.cover,
+                  onDetect: (capture) {
+                    if (isHandling.value) return;
 
-                for (final barcode in capture.barcodes) {
-                  final code = barcode.rawValue;
-                  if (code == null || code.isEmpty) continue;
+                    for (final barcode in capture.barcodes) {
+                      final code = barcode.rawValue;
+                      if (code == null || code.isEmpty) continue;
 
-                  // stop after first valid code
-                  isHandling.value = true;
-                  unawaited(handleCode(code));
-                  break;
-                }
-              },
-              errorBuilder: (context, error) {
-                appLogger.error('Error scanning QR code: $error');
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      'Error: $error',
-                      style: const TextStyle(color: Colors.red),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          ScanWindowOverlay(
-            scanWindow: scanWindow,
-            color: AppColors.whiteBlur.withOpacity(.75),
-            borderRadius: BorderRadius.circular(16),
-            borderColor: AppColors.gray0,
-            borderWidth: 4,
-            controller: controller,
-          ),
-        ],
+                      isHandling.value = true;
+                      unawaited(handleCode(code));
+                      break;
+                    }
+                  },
+                  errorBuilder: (context, error) {
+                    appLogger.error('Error scanning QR code: $error');
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          error.toString(),
+                          style: const TextStyle(color: Colors.red),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              ScanWindowOverlay(
+                scanWindow: scanWindow,
+                color: AppColors.whiteBlur.withOpacity(.75),
+                borderRadius: BorderRadius.circular(16),
+                borderColor: AppColors.gray0,
+                borderWidth: 4,
+                controller: controller,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
