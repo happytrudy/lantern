@@ -18,7 +18,6 @@ import 'package:lantern/features/vpn/provider/vpn_notifier.dart';
 import 'package:lantern/features/vpn/provider/vpn_status_notifier.dart';
 import 'package:lantern/features/vpn/server_selection_callbacks.dart';
 import 'package:lantern/features/vpn/single_city_server_view.dart';
-import 'package:lantern/features/private_server/manually_server_setup.dart';
 
 @RoutePage(name: 'ServerSelection')
 class ServerSelection extends StatefulHookConsumerWidget {
