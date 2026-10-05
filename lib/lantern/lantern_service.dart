@@ -561,22 +561,6 @@ class LanternService implements LanternCoreService {
   }
 
   @override
-  Future<Either<Failure, Unit>> digitalOceanPrivateServer() {
-    if (PlatformUtils.isFFISupported) {
-      return _ffiService.digitalOceanPrivateServer();
-    }
-    return _platformService.digitalOceanPrivateServer();
-  }
-
-  @override
-  Future<Either<Failure, Unit>> googleCloudPrivateServer() {
-    if (PlatformUtils.isFFISupported) {
-      return _ffiService.googleCloudPrivateServer();
-    }
-    return _platformService.googleCloudPrivateServer();
-  }
-
-  @override
   Stream<PrivateServerStatus> watchPrivateServerStatus() {
     if (PlatformUtils.isFFISupported) {
       return _ffiService.watchPrivateServerStatus();

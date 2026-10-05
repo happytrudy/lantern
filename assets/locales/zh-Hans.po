@@ -145,6 +145,12 @@ msgstr "分流"
 msgid "server_locations"
 msgstr "服务器位置"
 
+msgid "startup_auto_connect"
+msgstr "启动时自动连接"
+
+msgid "startup_auto_connect_description"
+msgstr "连接上次使用的自建服务器；智能路由会选择当前延迟最低的服务器。"
+
 msgid "lantern_pro_email"
 msgstr "蓝灯专业版电子邮箱:"
 

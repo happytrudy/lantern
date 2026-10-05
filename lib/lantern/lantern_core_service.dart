@@ -320,10 +320,6 @@ abstract class LanternCoreService {
   );
 
   /// Private server methods
-  Future<Either<Failure, Unit>> digitalOceanPrivateServer();
-
-  Future<Either<Failure, Unit>> googleCloudPrivateServer();
-
   Stream<PrivateServerStatus> watchPrivateServerStatus();
 
   Future<Either<Failure, Unit>> setUserInput({

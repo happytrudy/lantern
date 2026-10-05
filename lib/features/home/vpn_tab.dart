@@ -26,34 +26,29 @@ class VpnTab extends ConsumerWidget {
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: defaultSize),
-        // Preserve the spaced layout when it fits while allowing the body to
-        // grow and scroll when the window leaves less vertical room.
+        // Keep the connect control centered in the usable viewport while the
+        // settings card remains anchored below it.
         child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            primary: false,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: <Widget>[
-                  const VPNSwitch(),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      if (!isUserPro) ...{
-                        if (serverType == ServerLocationType.privateServer)
-                          InfoRow(text: 'private_server_usage_message'.i18n)
-                        else if (!PlatformUtils.isIOS &&
-                            !isSmallScreen(context))
-                          const DataUsage(),
-                      },
-                      const SizedBox(height: 8),
-                      _SettingCard(),
-                      SizedBox(height: 10.h),
-                    ],
-                  ),
-                ],
-              ),
+          builder: (context, constraints) => ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Column(
+              children: <Widget>[
+                Expanded(child: Center(child: const VPNSwitch())),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    if (!isUserPro) ...{
+                      if (serverType == ServerLocationType.privateServer)
+                        InfoRow(text: 'private_server_usage_message'.i18n)
+                      else if (!PlatformUtils.isIOS && !isSmallScreen(context))
+                        const DataUsage(),
+                    },
+                    const SizedBox(height: 8),
+                    _SettingCard(),
+                    SizedBox(height: 10.h),
+                  ],
+                ),
+              ],
             ),
           ),
         ),

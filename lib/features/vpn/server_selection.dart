@@ -18,6 +18,7 @@ import 'package:lantern/features/vpn/provider/vpn_notifier.dart';
 import 'package:lantern/features/vpn/provider/vpn_status_notifier.dart';
 import 'package:lantern/features/vpn/server_selection_callbacks.dart';
 import 'package:lantern/features/vpn/single_city_server_view.dart';
+import 'package:lantern/features/private_server/manually_server_setup.dart';
 
 @RoutePage(name: 'ServerSelection')
 class ServerSelection extends StatefulHookConsumerWidget {
@@ -95,9 +96,7 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
           ? _buildPrivateServersOnly(selectedServer)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: PrivateServerLocationListView()),
-              ],
+              children: [Expanded(child: PrivateServerLocationListView())],
             ),
     );
   }
@@ -215,15 +214,23 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
       }
     }
 
-    final fastest = ref.read(availableServersProvider).value?.fastestPrivateServer;
+    // Smart routing is an active decision: always probe every configured
+    // self-hosted server before selecting the lowest current latency.
+    await ref
+        .read(availableServersProvider.notifier)
+        .forceFetchAvailableServers();
+    if (!mounted) return;
+    final fastest = ref
+        .read(availableServersProvider)
+        .value
+        ?.fastestPrivateServer;
     if (fastest == null) {
       context.showSnackBar('请先添加自建服务器');
       return;
     }
-    final result = await ref.read(vpnProvider.notifier).connectToServer(
-          ServerLocationType.privateServer,
-          fastest.tag,
-        );
+    final result = await ref
+        .read(vpnProvider.notifier)
+        .connectToServer(ServerLocationType.privateServer, fastest.tag);
 
     result.fold(
       (failure) {
@@ -237,11 +244,11 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
               appRouter.maybePop();
               final retryResult = await ref
                   .read(vpnProvider.notifier)
-              .connectToServer(
-                ServerLocationType.privateServer,
-                fastest.tag,
-                skipConflictCheck: true,
-              );
+                  .connectToServer(
+                    ServerLocationType.privateServer,
+                    fastest.tag,
+                    skipConflictCheck: true,
+                  );
               if (!context.mounted) return;
               retryResult.fold((failure) {
                 context.showSnackBar(failure.localizedErrorMessage);
@@ -254,7 +261,9 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
         }
       },
       (_) async {
-        ref.read(serverLocationProvider.notifier).updateServerLocation(
+        ref
+            .read(serverLocationProvider.notifier)
+            .updateServerLocation(
               ServerLocation(
                 serverType: ServerLocationType.privateServer.name,
                 serverName: fastest.tag,
@@ -283,7 +292,7 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
               tileKey: const Key('server_selection.setup_private_server'),
               label: 'setup_private_server'.i18n,
               onPressed: () {
-                context.pushRoute(PrivateServerSetup());
+                context.pushRoute(ManuallyServerSetup());
               },
             ),
             const DividerSpace(padding: EdgeInsets.zero),

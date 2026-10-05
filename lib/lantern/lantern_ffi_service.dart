@@ -1157,42 +1157,6 @@ class LanternFFIService implements LanternCoreService {
   }
 
   @override
-  Future<Either<Failure, Unit>> digitalOceanPrivateServer() async {
-    try {
-      final result = await runInBackground<String>(() async {
-        return _ffiService.digitalOceanPrivateServer().toDartString();
-      });
-      checkAPIError(result);
-      return Right(unit);
-    } catch (e, stackTrace) {
-      appLogger.info(
-        'Error starting Digital Ocean private server',
-        e,
-        stackTrace,
-      );
-      return Left(e.toFailure());
-    }
-  }
-
-  @override
-  Future<Either<Failure, Unit>> googleCloudPrivateServer() async {
-    try {
-      final result = await runInBackground<String>(() async {
-        return _ffiService.googleCloudPrivateServer().toDartString();
-      });
-      checkAPIError(result);
-      return Right(unit);
-    } catch (e, stackTrace) {
-      appLogger.info(
-        'Error starting Digital Ocean private server',
-        e,
-        stackTrace,
-      );
-      return Left(e.toFailure());
-    }
-  }
-
-  @override
   Stream<PrivateServerStatus> watchPrivateServerStatus() {
     return _privateServerStatus;
   }

@@ -30,15 +30,6 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
     return PrivateServerStatus(status: 'initial', data: null, error: null);
   }
 
-  // Add methods to handle private server logic, e.g., fetching providers, etc.
-  Future<Either<Failure, Unit>> digitalOcean() async {
-    return ref.read(lanternServiceProvider).digitalOceanPrivateServer();
-  }
-
-  Future<Either<Failure, Unit>> googleCloud() async {
-    return ref.read(lanternServiceProvider).googleCloudPrivateServer();
-  }
-
   Future<Either<Failure, Unit>> validateSession() async {
     return ref.read(lanternServiceProvider).validateSession();
   }

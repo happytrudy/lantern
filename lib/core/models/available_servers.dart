@@ -58,8 +58,7 @@ class AvailableServers {
       ..sort((a, b) => a.selectionHistory!.lastSuccessDelayMs.compareTo(
             b.selectionHistory!.lastSuccessDelayMs,
           ));
-    if (ranked.isNotEmpty) return ranked.first;
-    return userServers.isEmpty ? null : userServers.first;
+    return ranked.isEmpty ? null : ranked.first;
   }
 }
 

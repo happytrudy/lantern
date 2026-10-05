@@ -131,6 +131,12 @@ msgstr "Split Tunneling"
 msgid "server_locations"
 msgstr "Server Locations"
 
+msgid "startup_auto_connect"
+msgstr "Connect automatically at startup"
+
+msgid "startup_auto_connect_description"
+msgstr "Reconnect to the last self-hosted server, or choose the lowest-latency server in Smart Routing."
+
 msgid "lantern_pro_email"
 msgstr "Lantern Pro Email:"
 

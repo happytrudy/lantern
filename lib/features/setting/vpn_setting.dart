@@ -55,9 +55,9 @@ class VPNSetting extends HookConsumerWidget {
               ),
               DividerSpace(),
               AppTile(
-                label: '启动自动连接',
+                label: 'startup_auto_connect'.i18n,
                 subtitle: Text(
-                  '连接上次使用的自建服务器；智能路由选择最低延迟节点',
+                  'startup_auto_connect_description'.i18n,
                   style: textTheme.labelMedium!.copyWith(
                     color: context.textTertiary,
                   ),
@@ -86,8 +86,9 @@ class VPNSetting extends HookConsumerWidget {
                 SplitTunnelingTile(
                   label: 'split_tunneling'.i18n,
                   icon: AppImagePaths.callSpilt,
-                  actionText:
-                      splitTunnelingEnabled ? 'enabled'.i18n : 'disabled'.i18n,
+                  actionText: splitTunnelingEnabled
+                      ? 'enabled'.i18n
+                      : 'disabled'.i18n,
                   onPressed: () => appRouter.push(const SplitTunneling()),
                 ),
                 DividerSpace(),
