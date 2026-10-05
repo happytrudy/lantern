@@ -176,7 +176,7 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Text(
-            '智能路由',
+            'smart_routing'.i18n,
             style: _textTheme?.labelLarge!.copyWith(
               color: context.textSecondary,
             ),
@@ -186,10 +186,10 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
           padding: EdgeInsets.zero,
           child: AppTile(
             icon: AppImagePaths.location,
-            label: '智能路由',
+            label: 'smart_routing'.i18n,
             onPressed: onSmartLocation,
             subtitle: Text(
-              '从自建服务器中选择延迟最低的节点',
+              'smart_routing_private_description'.i18n,
               style: _textTheme!.labelMedium!.copyWith(
                 color: context.textTertiary,
               ),

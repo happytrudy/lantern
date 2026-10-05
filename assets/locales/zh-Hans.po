@@ -1633,6 +1633,9 @@ msgstr "路由模式"
 msgid "smart_routing"
 msgstr "智能路由"
 
+msgid "smart_routing_private_description"
+msgstr "从自建服务器中选择延迟最低的节点"
+
 msgid "full_tunnel"
 msgstr "全局代理"
 

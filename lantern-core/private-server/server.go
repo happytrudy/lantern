@@ -369,6 +369,9 @@ func AddServerManually(ip, port, accessToken, tag string, vpnClient *ipc.Client,
 	}
 	slog.Debug("Server manager instance added successfully", slog.String("tag", resp.Tag))
 	resp.Tag = tag
+	if server, found, err := vpnClient.GetServerByTag(ctx, tag); err == nil && found {
+		resp.Protocol = server.Type
+	}
 
 	resp.Location = location
 	server, jerr := json.Marshal(resp)

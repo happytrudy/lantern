@@ -199,6 +199,11 @@ class VpnNotifier extends _$VpnNotifier {
       if (conflict != null) return conflict;
     }
 
+    // Smart Routing may spend several seconds probing every self-hosted
+    // server before the native tunnel starts. Reflect that work immediately
+    // so the connect control cannot look unresponsive during probing.
+    state = VPNStatus.connecting;
+
     final serverLocation = ref.read(serverLocationProvider);
 
     final type = serverLocation.serverType.toServerLocationType;
@@ -211,6 +216,7 @@ class VpnNotifier extends _$VpnNotifier {
           .forceFetchAvailableServers();
       final available = ref.read(availableServersProvider).value;
       if (available == null || !available.hasUserServers) {
+        state = VPNStatus.disconnected;
         return Left(
           Failure(
             error: 'self_hosted_server_required',
@@ -220,6 +226,7 @@ class VpnNotifier extends _$VpnNotifier {
       }
       final fastest = available.fastestPrivateServer;
       if (fastest == null) {
+        state = VPNStatus.disconnected;
         return Left(
           Failure(
             error: 'self_hosted_server_unreachable',
@@ -239,6 +246,7 @@ class VpnNotifier extends _$VpnNotifier {
 
     final tag = serverLocation.serverName;
     if (tag.isEmpty) {
+      state = VPNStatus.disconnected;
       appLogger.info(
         'Connection aborted: selected self-hosted server tag is empty.',
       );
@@ -267,10 +275,14 @@ class VpnNotifier extends _$VpnNotifier {
       if (conflict != null) return conflict;
     }
 
+    state = VPNStatus.connecting;
     appLogger.debug("Connecting to server: $location with tag: $tag");
     final result = await ref
         .read(lanternServiceProvider)
         .connectToServer(location.name, tag);
+    if (result.isLeft() && ref.mounted && state == VPNStatus.connecting) {
+      state = VPNStatus.disconnected;
+    }
     return result;
   }
 

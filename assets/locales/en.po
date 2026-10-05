@@ -1634,6 +1634,9 @@ msgstr "Routing Mode"
 msgid "smart_routing"
 msgstr "Smart Routing"
 
+msgid "smart_routing_private_description"
+msgstr "Choose the lowest-latency server from your self-hosted servers"
+
 msgid "full_tunnel"
 msgstr "Full Tunnel"
 

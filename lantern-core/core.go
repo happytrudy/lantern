@@ -82,6 +82,7 @@ type LanternCore struct {
 	cancel       context.CancelFunc
 	initOnce     sync.Once
 	eventEmitter utils.FlutterEventEmitter
+	trafficUsage *localTrafficUsage
 }
 
 var (
@@ -309,6 +310,8 @@ func (lc *LanternCore) initialize(opts *utils.Opts, eventEmitter utils.FlutterEv
 	lc.ctx = ctx
 	lc.cancel = cancel
 	lc.eventEmitter = eventEmitter
+	lc.trafficUsage = newLocalTrafficUsage(opts.DataDir, client, ctx)
+	go lc.trafficUsage.run(ctx)
 
 	go lc.listenPeerConnectionEvents()
 	go lc.listenUnboundedSnapshots()
@@ -959,15 +962,7 @@ func parseIssueType(s string) issue.IssueType {
 /////////////////
 
 func (lc *LanternCore) DataCapInfo() (string, error) {
-	info, err := lc.client.DataCapInfo(lc.ctx)
-	if err != nil {
-		return "", err
-	}
-	jsonBytes, err := json.Marshal(info)
-	if err != nil {
-		return "", fmt.Errorf("error marshalling DataCapInfo: %w", err)
-	}
-	return string(jsonBytes), nil
+	return lc.trafficUsage.snapshot()
 }
 
 func (lc *LanternCore) UserData() ([]byte, error) {

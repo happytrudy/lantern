@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:fpdart/fpdart.dart';
 import 'package:lantern/core/common/app_eum.dart';
@@ -152,6 +153,27 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
         break;
       case 'EventTypeProvisioningCompleted':
         appLogger.info("Provisioning completed");
+        final data = status.data;
+        if (data != null && data.isNotEmpty) {
+          try {
+            final payload = jsonDecode(data);
+            if (payload is Map) {
+              final tag = (payload['tag'] ?? '').toString();
+              if (tag.isNotEmpty) {
+                await sl<LocalStorageService>().savePrivateServer(
+                  tag: tag,
+                  name: tag,
+                  ip: (payload['external_ip'] ?? '').toString(),
+                  port: (payload['port'] ?? '').toString(),
+                  accessToken: (payload['access_token'] ?? '').toString(),
+                  protocol: (payload['protocol'] ?? '').toString(),
+                );
+              }
+            }
+          } catch (error, stackTrace) {
+            appLogger.error('Failed to persist private server protocol', error, stackTrace);
+          }
+        }
         state = status;
 
         ///reset state to initial once server is added

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:lantern/core/widgets/info_row.dart';
 import 'package:lantern/core/widgets/setting_tile.dart';
 import 'package:lantern/features/home/provider/radiance_settings_providers.dart';
 import 'package:lantern/features/vpn/location_setting.dart';
@@ -20,9 +19,6 @@ class VpnTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isUserPro = ref.watch(isUserProProvider);
-    final serverLocation = ref.watch(serverLocationProvider);
-    final serverType = serverLocation.serverType.toServerLocationType;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: defaultSize),
@@ -37,12 +33,8 @@ class VpnTab extends ConsumerWidget {
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    if (!isUserPro) ...{
-                      if (serverType == ServerLocationType.privateServer)
-                        InfoRow(text: 'private_server_usage_message'.i18n)
-                      else if (!PlatformUtils.isIOS && !isSmallScreen(context))
-                        const DataUsage(),
-                    },
+                    if (!PlatformUtils.isIOS && !isSmallScreen(context))
+                      const DataUsage(),
                     const SizedBox(height: 8),
                     _SettingCard(),
                     SizedBox(height: 10.h),
@@ -67,10 +59,6 @@ class _SettingCard extends ConsumerWidget {
       radianceSettingsProvider.select((s) => s.splitTunneling),
     );
     final isUserPro = ref.watch(isUserProProvider);
-    final serverType = ref
-        .watch(serverLocationProvider)
-        .serverType
-        .toServerLocationType;
 
     // Small screens only (engineering#3046); regular screens show the
     // standalone DataUsage card in VpnTab instead. Same visibility rules:
@@ -79,7 +67,6 @@ class _SettingCard extends ConsumerWidget {
     final showDataUsage =
         smallScreen &&
         !isUserPro &&
-        serverType != ServerLocationType.privateServer &&
         !PlatformUtils.isIOS;
     final showRoutingMode = !PlatformUtils.isIOS;
     final showSplitTunneling =
