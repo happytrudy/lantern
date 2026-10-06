@@ -114,17 +114,20 @@ class LocalStorageService {
     String ip = '',
     String port = '',
     String accessToken = '',
-    bool isJoined = false,
+    bool? isJoined,
   }) async {
     final servers = getPrivateServers();
     final index = servers.indexWhere((item) => item['tag'] == tag);
-    final value = <String, dynamic>{
-      'tag': tag,
-      'name': name.isEmpty ? tag : name,
-      'ip': ip,
-      'port': port,
-      'is_joined': isJoined,
-    };
+    final value = <String, dynamic>{'tag': tag};
+    // Metadata updates must not erase the manager address or ownership.
+    if (name.isNotEmpty || index < 0) {
+      value['name'] = name.isEmpty ? tag : name;
+    }
+    if (ip.isNotEmpty || index < 0) value['ip'] = ip;
+    if (port.isNotEmpty || index < 0) value['port'] = port;
+    if (isJoined != null || index < 0) {
+      value['is_joined'] = isJoined ?? false;
+    }
     // Join/add operations may only provide a tag. Do not erase a protocol
     // already learned from the server manager's connection configuration.
     if (protocol.isNotEmpty || index < 0) {

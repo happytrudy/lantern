@@ -2012,3 +2012,15 @@ msgstr "Dismiss"
 
 msgid "unbounded_status_waiting"
 msgstr "Waiting to start"
+
+msgid "private_server_manager_address_missing"
+msgstr "The server's management address or port is missing. Please add this private server again."
+
+msgid "private_server_request_timeout"
+msgstr "The server did not respond in time. Check the management address, port and network connection."
+
+msgid "private_server_certificate_invalid"
+msgstr "The management server's TLS certificate could not be verified. Check its certificate and the configured address."
+
+msgid "private_server_owner_token_invalid"
+msgstr "Sharing requires a valid administrator access token. Please add this server again using its administrator token."

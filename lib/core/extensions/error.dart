@@ -11,6 +11,8 @@ extension ErrorExetension on Object {
       String description = _stripIpcPrefix(
         (this as PlatformException).message ?? '',
       );
+      final privateServerError = _privateServerError(description);
+      if (privateServerError != null) return privateServerError.i18n;
       if (description.contains("proxy_error")) {
         return "proxy_error".i18n;
       }
@@ -87,11 +89,17 @@ extension ErrorExetension on Object {
     }
 
     if (this is StateError) {
+      final privateServerError = _privateServerError(
+        (this as StateError).message,
+      );
+      if (privateServerError != null) return privateServerError.i18n;
       final categoryKey = _classifyVpnError((this as StateError).message);
       if (categoryKey != null) return categoryKey.i18n;
       return "an_error_occurred".i18n;
     }
     if (this is Exception) {
+      final privateServerError = _privateServerError(toString());
+      if (privateServerError != null) return privateServerError.i18n;
       final categoryKey = _classifyVpnError((this as Exception).toString());
       if (categoryKey != null) return categoryKey.i18n;
       return "an_error_occurred".i18n;
@@ -99,6 +107,20 @@ extension ErrorExetension on Object {
 
     return "an_error_occurred".i18n;
   }
+}
+
+String? _privateServerError(String description) {
+  for (final key in [
+    'private_server_manager_address_missing',
+    'private_server_request_timeout',
+    'private_server_certificate_invalid',
+    'private_server_owner_token_invalid',
+    'access_token_missing',
+    'server_alias_cannot_be_empty',
+  ]) {
+    if (description.contains(key)) return key;
+  }
+  return null;
 }
 
 /// Classifies VPN-related errors into user-friendly
@@ -141,7 +163,10 @@ String? _classifyVpnError(String description) {
 /// rather than as `Exception` instances, instead of wrapping them in
 /// `Exception(...)` just to route through `localizedDescription`.
 String localizeRawError(String rawError) {
-  return (_classifyVpnError(rawError) ?? 'an_error_occurred').i18n;
+  return (_privateServerError(rawError) ??
+          _classifyVpnError(rawError) ??
+          'an_error_occurred')
+      .i18n;
 }
 
 /// Strips the radiance IPC prefix from error messages.

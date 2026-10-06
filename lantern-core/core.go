@@ -1247,7 +1247,7 @@ func (lc *LanternCore) InviteToServerManagerInstance(ip, port, accessToken, invi
 	if err != nil {
 		return "", err
 	}
-	return lc.client.InviteToPrivateServer(lc.ctx, ip, portInt, accessToken, inviteName)
+	return privateserver.InviteToServer(lc.ctx, ip, portInt, accessToken, inviteName)
 }
 
 func (lc *LanternCore) RevokeServerManagerInvite(ip, port, accessToken, inviteName string) error {

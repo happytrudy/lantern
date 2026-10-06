@@ -6,7 +6,6 @@ import 'package:lantern/core/common/common.dart';
 import 'package:lantern/core/models/available_servers.dart';
 import 'package:lantern/core/services/injection_container.dart' show sl;
 import 'package:lantern/core/services/local_storage_service.dart';
-import 'package:lantern/lantern/lantern_service_notifier.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'available_servers_notifier.g.dart';
@@ -46,9 +45,12 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
             (item['access_token'] ?? item['accessToken'] ?? item['token'] ?? '')
                 .toString();
         final isJoined = item['is_joined'] == true;
-        var protocol = (item['protocol'] ?? item['type'] ?? '').toString().trim();
+        var protocol = (item['protocol'] ?? item['type'] ?? '')
+            .toString()
+            .trim();
         if (protocol.isEmpty) {
-          protocol = await _resolvePrivateServerProtocol(
+          protocol =
+              await _resolvePrivateServerProtocol(
                 ip: ip,
                 port: port,
                 accessToken: accessToken,
@@ -66,6 +68,7 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
           tag: tag,
           type: protocol,
           isLantern: false,
+          managerHost: ip,
           location: GeoLocation(
             country: '',
             countryCode: '',
@@ -107,8 +110,12 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
         path: '/api/v1/connect-config',
         queryParameters: {'token': accessToken},
       );
-      final request = await client.getUrl(uri).timeout(const Duration(seconds: 3));
-      final response = await request.close().timeout(const Duration(seconds: 3));
+      final request = await client
+          .getUrl(uri)
+          .timeout(const Duration(seconds: 3));
+      final response = await request.close().timeout(
+        const Duration(seconds: 3),
+      );
       if (response.statusCode != HttpStatus.ok) return null;
       final body = await response.transform(utf8.decoder).join();
       final decoded = jsonDecode(body);

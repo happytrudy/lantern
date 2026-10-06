@@ -2003,3 +2003,15 @@ msgstr "關閉"
 
 msgid "unbounded_status_waiting"
 msgstr "等待啟動"
+
+msgid "private_server_manager_address_missing"
+msgstr "伺服器的管理地址或連接埠缺失，請重新加入此自建伺服器。"
+
+msgid "private_server_request_timeout"
+msgstr "伺服器未及時回應，請檢查管理地址、連接埠和網路連線。"
+
+msgid "private_server_certificate_invalid"
+msgstr "無法驗證管理服務的 TLS 憑證，請檢查伺服器憑證和設定的管理地址。"
+
+msgid "private_server_owner_token_invalid"
+msgstr "分享需要有效的管理員存取權杖，請使用此伺服器的管理員權杖重新加入。"

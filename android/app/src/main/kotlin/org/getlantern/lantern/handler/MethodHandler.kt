@@ -1046,11 +1046,13 @@ class MethodHandler : FlutterPlugin,
                             success(accessKey)
                         }
                     }.onFailure { e ->
-                        result.error(
-                            "DigitalOcean",
-                            e.localizedMessage ?: "Error while activating Digital Ocean",
-                            e
-                        )
+                        withContext(Dispatchers.Main) {
+                            result.error(
+                                "PrivateServer",
+                                e.localizedMessage ?: "Error generating private server access key",
+                                null
+                            )
+                        }
                     }
                 }
             }

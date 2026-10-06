@@ -2010,3 +2010,15 @@ msgstr "关闭"
 
 msgid "unbounded_status_waiting"
 msgstr "等待启动"
+
+msgid "private_server_manager_address_missing"
+msgstr "服务器的管理地址或端口缺失，请重新添加此自建服务器。"
+
+msgid "private_server_request_timeout"
+msgstr "服务器未及时响应，请检查管理地址、端口和网络连接。"
+
+msgid "private_server_certificate_invalid"
+msgstr "无法验证管理服务的 TLS 证书，请检查服务器证书和配置的管理地址。"
+
+msgid "private_server_owner_token_invalid"
+msgstr "分享需要有效的管理员访问令牌，请使用此服务器的管理员令牌重新添加。"

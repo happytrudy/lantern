@@ -78,6 +78,7 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
         ip: ip,
         port: port,
         accessToken: accessToken,
+        isJoined: false,
       );
     }
     return result;
@@ -166,12 +167,17 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
                   ip: (payload['external_ip'] ?? '').toString(),
                   port: (payload['port'] ?? '').toString(),
                   accessToken: (payload['access_token'] ?? '').toString(),
+                  isJoined: false,
                   protocol: (payload['protocol'] ?? '').toString(),
                 );
               }
             }
           } catch (error, stackTrace) {
-            appLogger.error('Failed to persist private server protocol', error, stackTrace);
+            appLogger.error(
+              'Failed to persist private server protocol',
+              error,
+              stackTrace,
+            );
           }
         }
         state = status;

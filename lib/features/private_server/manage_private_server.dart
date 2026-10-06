@@ -74,7 +74,9 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
                       borderRadius: BorderRadius.circular(40),
                       shape: BoxShape.rectangle,
                       border: Border.all(
-                          color: context.actionTabbarBorder, width: 1),
+                        color: context.actionTabbarBorder,
+                        width: 1,
+                      ),
                     ),
                     tabs: [
                       Tab(child: Text('my_servers'.i18n)),
@@ -110,16 +112,9 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
     return Column(
       children: <Widget>[
         const SizedBox(height: 8),
-        InfoRow(
-          text: 'access_key_expiration'.i18n,
-        ),
+        InfoRow(text: 'access_key_expiration'.i18n),
         const SizedBox(height: 8),
-        Expanded(
-          child: _buildListView(
-            myServers,
-            showShareAccessKey: true,
-          ),
-        ),
+        Expanded(child: _buildListView(myServers, showShareAccessKey: true)),
       ],
     );
   }
@@ -146,8 +141,10 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     IconButton(
-                      icon: Icon(Icons.delete_outline,
-                          color: context.textPrimary),
+                      icon: Icon(
+                        Icons.delete_outline,
+                        color: context.textPrimary,
+                      ),
                       iconSize: 24,
                       onPressed: () => showDeleteDialog(item.tag),
                     ),
@@ -164,7 +161,7 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
                   onPressed: () => onTapShareAccessKey(item),
                 ),
                 SizedBox(height: 8),
-              }
+              },
             ],
           ),
         );
@@ -173,6 +170,15 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
   }
 
   void onTapShareAccessKey(Server server) {
+    if (_isGeneratingAccessKey) return;
+    final managerHost = server.managerHost.isNotEmpty
+        ? server.managerHost
+        : server.serverIP;
+    if (managerHost.trim().isEmpty ||
+        server.credentials?.port.isEmpty == true) {
+      _showAccessKeyError('private_server_manager_address_missing'.i18n);
+      return;
+    }
     final credential = server.credentials;
     if (credential == null || credential.accessToken.isEmpty) {
       appLogger.error('No access token for tag: ${server.tag}');
@@ -186,7 +192,7 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
 
     final privateServer = PrivateServer(
       serverName: server.tag,
-      externalIp: server.serverIP,
+      externalIp: managerHost,
       port: credential.port,
       accessToken: credential.accessToken,
       serverLocationName: server.location.city,
@@ -203,7 +209,8 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
         return;
       } catch (e) {
         appLogger.warning(
-            'Cached access key invalid for tag: ${server.tag}, regenerating');
+          'Cached access key invalid for tag: ${server.tag}, regenerating',
+        );
         _accessKeyCache.remove(server.tag);
       }
     }
@@ -220,15 +227,9 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           SizedBox(height: 16),
-          Text(
-            'set_server_alias'.i18n,
-            style: textTheme!.headlineMedium,
-          ),
+          Text('set_server_alias'.i18n, style: textTheme!.headlineMedium),
           SizedBox(height: defaultSize),
-          Text(
-            'this_name_pre_filled'.i18n,
-            style: textTheme!.bodyMedium,
-          ),
+          Text('this_name_pre_filled'.i18n, style: textTheme!.bodyMedium),
           SizedBox(height: size24),
           AppTextField(
             label: 'server_alias'.i18n,
@@ -268,7 +269,9 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
   }
 
   Future<void> generateAccessKey(
-      PrivateServer server, String inviteName) async {
+    PrivateServer server,
+    String inviteName,
+  ) async {
     if (!mounted || _isGeneratingAccessKey) {
       return;
     }
@@ -301,17 +304,24 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
 
     try {
       final result = await request.timeout(const Duration(seconds: 30));
+      if (!mounted) return;
+      context.hideLoadingDialog();
       result.fold(
         (failure) => _showAccessKeyError(failure.localizedErrorMessage),
         (accessKey) {
           try {
             final tokenData = JwtDecoder.decode(accessKey);
             _accessKeyCache[server.serverName] = accessKey;
-            appLogger
-                .info('Access key generated and cached for: ${server.serverName}');
+            appLogger.info(
+              'Access key generated and cached for: ${server.serverName}',
+            );
             sharePrivateAccessKey(server, tokenData);
           } catch (error, stackTrace) {
-            appLogger.error('Generated access key is invalid', error, stackTrace);
+            appLogger.error(
+              'Generated access key is invalid',
+              error,
+              stackTrace,
+            );
             _showAccessKeyError('error'.i18n);
           }
         },
@@ -321,12 +331,18 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
       if (requestCompleted && mounted) {
         setState(() => _isGeneratingAccessKey = false);
       }
-      appLogger.error('Generating private server access key timed out', error,
-          stackTrace);
-      _showAccessKeyError('The request timed out. Check the server and try again.');
+      appLogger.error(
+        'Generating private server access key timed out',
+        error,
+        stackTrace,
+      );
+      _showAccessKeyError('private_server_request_timeout'.i18n);
     } catch (error, stackTrace) {
-      appLogger.error('Failed to generate private server access key', error,
-          stackTrace);
+      appLogger.error(
+        'Failed to generate private server access key',
+        error,
+        stackTrace,
+      );
       _showAccessKeyError(error.toString());
     } finally {
       if (mounted) {
@@ -355,10 +371,7 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           SizedBox(height: 16),
-          Text(
-            'rename_server'.i18n,
-            style: textTheme!.titleLarge,
-          ),
+          Text('rename_server'.i18n, style: textTheme!.titleLarge),
           SizedBox(height: 16),
           AppTextField(
             label: 'server_name'.i18n,
@@ -396,14 +409,8 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           SizedBox(height: 16),
-          AppImage(
-            path: AppImagePaths.delete,
-            height: 40,
-          ),
-          Text(
-            'remove_server_?'.i18n,
-            style: textTheme!.titleLarge,
-          ),
+          AppImage(path: AppImagePaths.delete, height: 40),
+          Text('remove_server_?'.i18n, style: textTheme!.titleLarge),
           SizedBox(height: 16),
           Text('remove_server_message'.i18n.fill([serverName])),
           SizedBox(height: 16),
@@ -447,8 +454,9 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
 
   Future<void> onDelete(String serverName) async {
     context.showLoadingDialog();
-    final res =
-        await ref.read(manageServerProvider.notifier).deleteServer(serverName);
+    final res = await ref
+        .read(manageServerProvider.notifier)
+        .deleteServer(serverName);
     if (!mounted) return;
     context.hideLoadingDialog();
     res.fold(

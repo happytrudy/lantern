@@ -125,6 +125,9 @@ class Server {
   final bool isLantern;
   final Map<String, dynamic>? outbound;
   final Map<String, dynamic>? endpoint;
+
+  /// Address of the management API, which may differ from the VPN endpoint.
+  final String managerHost;
   final GeoLocation location;
   final ServerCredential? credentials;
   final SelectionHistory? selectionHistory;
@@ -135,6 +138,7 @@ class Server {
     required this.isLantern,
     this.outbound,
     this.endpoint,
+    this.managerHost = '',
     required this.location,
     this.credentials,
     this.selectionHistory,
@@ -146,6 +150,7 @@ class Server {
     isLantern: json['isLantern'] ?? false,
     outbound: json['outbound'] as Map<String, dynamic>?,
     endpoint: json['endpoint'] as Map<String, dynamic>?,
+    managerHost: (json['manager_host'] ?? '').toString(),
     location: GeoLocation.fromJson(
       (json['location'] as Map<String, dynamic>?) ?? const {},
     ),
@@ -159,7 +164,9 @@ class Server {
 
   /// IP address extracted from outbound or endpoint options.
   String get serverIP =>
-      outbound?['server'] as String? ?? endpoint?['server'] as String? ?? '';
+      outbound?['server'] as String? ??
+      endpoint?['server'] as String? ??
+      managerHost;
 
   /// Protocol type, with compatibility fallbacks for server-manager payloads
   /// that put the type inside the selected outbound/endpoint object.
