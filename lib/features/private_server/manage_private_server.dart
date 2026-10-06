@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -26,6 +28,7 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
   /// Cache of generated access keys keyed by server tag.
   /// Avoids redundant API calls when the user taps share on the same server.
   final Map<String, String> _accessKeyCache = {};
+  bool _isGeneratingAccessKey = false;
 
   @override
   Widget build(BuildContext context) {
@@ -211,77 +214,136 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
   void showShareAccessKeyDialog(PrivateServer server) {
     final inviteNameController = TextEditingController();
     AppDialog.customDialog(
-        context: context,
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            SizedBox(height: 16),
-            Text(
-              'set_server_alias'.i18n,
-              style: textTheme!.headlineMedium,
-            ),
-            SizedBox(height: defaultSize),
-            Text(
-              'this_name_pre_filled'.i18n,
-              style: textTheme!.bodyMedium,
-            ),
-            SizedBox(height: size24),
-            AppTextField(
-              label: 'server_alias'.i18n,
-              prefixIcon: AppImagePaths.server,
-              controller: inviteNameController,
-              hintText: '',
-            )
-          ],
-        ),
-        action: [
-          AppTextButton(
-            label: 'cancel'.i18n,
-            textColor: context.textDisabled,
-            onPressed: () {
-              appRouter.pop();
-            },
+      context: context,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          SizedBox(height: 16),
+          Text(
+            'set_server_alias'.i18n,
+            style: textTheme!.headlineMedium,
           ),
-          AppTextButton(
-            label: 'generate_access_key'.i18n,
-            onPressed: () {
-              generateAccessKey(server, inviteNameController.text.trim());
-              appRouter.pop();
-            },
-          )
-        ]);
+          SizedBox(height: defaultSize),
+          Text(
+            'this_name_pre_filled'.i18n,
+            style: textTheme!.bodyMedium,
+          ),
+          SizedBox(height: size24),
+          AppTextField(
+            label: 'server_alias'.i18n,
+            prefixIcon: AppImagePaths.server,
+            controller: inviteNameController,
+            hintText: '',
+          ),
+        ],
+      ),
+      action: [
+        AppTextButton(
+          label: 'cancel'.i18n,
+          textColor: context.textDisabled,
+          onPressed: () {
+            appRouter.pop();
+          },
+        ),
+        AppTextButton(
+          label: 'generate_access_key'.i18n,
+          onPressed: () async {
+            final inviteName = inviteNameController.text.trim();
+            if (inviteName.isEmpty) {
+              context.showSnackBar('server_alias_cannot_be_empty'.i18n);
+              return;
+            }
+            appRouter.pop();
+            await Future<void>.delayed(Duration.zero);
+            if (mounted) {
+              await generateAccessKey(server, inviteName);
+            }
+          },
+        ),
+      ],
+    ).whenComplete(() {
+      inviteNameController.dispose();
+    });
   }
 
   Future<void> generateAccessKey(
       PrivateServer server, String inviteName) async {
-    if (inviteName.isEmpty) {
-      context.showSnackBar('server_alias_cannot_be_empty'.i18n);
+    if (!mounted || _isGeneratingAccessKey) {
       return;
     }
+    setState(() => _isGeneratingAccessKey = true);
     context.showLoadingDialog();
-    final result = await ref
+    final request = ref
         .read(privateServerProvider.notifier)
         .inviteToServerManagerInstance(
-            server.externalIp, server.port, server.accessToken, inviteName);
-
-    result.fold(
-      (failure) {
-        context.hideLoadingDialog();
-        AppDialog.errorDialog(
-          context: context,
-          title: 'error'.i18n,
-          content: failure.localizedErrorMessage,
+          server.externalIp,
+          server.port,
+          server.accessToken,
+          inviteName,
         );
+    var timedOut = false;
+    var requestCompleted = false;
+    request.then(
+      (_) {
+        requestCompleted = true;
+        if (timedOut && mounted) {
+          setState(() => _isGeneratingAccessKey = false);
+        }
       },
-      (accessKey) {
+      onError: (_) {
+        requestCompleted = true;
+        if (timedOut && mounted) {
+          setState(() => _isGeneratingAccessKey = false);
+        }
+      },
+    );
+
+    try {
+      final result = await request.timeout(const Duration(seconds: 30));
+      result.fold(
+        (failure) => _showAccessKeyError(failure.localizedErrorMessage),
+        (accessKey) {
+          try {
+            final tokenData = JwtDecoder.decode(accessKey);
+            _accessKeyCache[server.serverName] = accessKey;
+            appLogger
+                .info('Access key generated and cached for: ${server.serverName}');
+            sharePrivateAccessKey(server, tokenData);
+          } catch (error, stackTrace) {
+            appLogger.error('Generated access key is invalid', error, stackTrace);
+            _showAccessKeyError('error'.i18n);
+          }
+        },
+      );
+    } on TimeoutException catch (error, stackTrace) {
+      timedOut = true;
+      if (requestCompleted && mounted) {
+        setState(() => _isGeneratingAccessKey = false);
+      }
+      appLogger.error('Generating private server access key timed out', error,
+          stackTrace);
+      _showAccessKeyError('The request timed out. Check the server and try again.');
+    } catch (error, stackTrace) {
+      appLogger.error('Failed to generate private server access key', error,
+          stackTrace);
+      _showAccessKeyError(error.toString());
+    } finally {
+      if (mounted) {
         context.hideLoadingDialog();
-        _accessKeyCache[server.serverName] = accessKey;
-        appLogger
-            .info('Access key generated and cached for: ${server.serverName}');
-        final tokenData = JwtDecoder.decode(accessKey);
-        sharePrivateAccessKey(server, tokenData);
-      },
+        if (!timedOut) {
+          setState(() => _isGeneratingAccessKey = false);
+        }
+      }
+    }
+  }
+
+  void _showAccessKeyError(String message) {
+    if (!mounted) return;
+    AppDialog.errorDialog(
+      context: context,
+      title: 'error'.i18n,
+      content: message,
     );
   }
 

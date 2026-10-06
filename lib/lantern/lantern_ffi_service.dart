@@ -1300,7 +1300,7 @@ class LanternFFIService implements LanternCoreService {
             .toDartString();
       });
       checkAPIError(result);
-      return Right('ok');
+      return Right(result);
     } catch (e, stackTrace) {
       appLogger.error(
         'Error inviting to server manager instance',
