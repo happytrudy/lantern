@@ -2015,3 +2015,15 @@ msgstr "無法驗證管理服務的 TLS 憑證，請檢查伺服器憑證和設�
 
 msgid "private_server_owner_token_invalid"
 msgstr "分享需要有效的管理員存取權杖，請使用此伺服器的管理員權杖重新加入。"
+
+msgid "windows_service_missing_binary"
+msgstr "VPN 背景程式檔案缺失，請完整解壓縮 Windows 軟體包或重新安裝。"
+
+msgid "windows_service_permission_required"
+msgstr "安裝或啟動 VPN 服務需要 Windows 管理員授權，請再次點選連線並允許 Windows 授權提示。"
+
+msgid "windows_service_start_failed"
+msgstr "Windows VPN 服務啟動失敗，請重新安裝，並查看本機記錄中的具體原因。"
+
+msgid "windows_service_not_ready"
+msgstr "Windows VPN 背景服務未回應，請稍後重試或重新安裝。"

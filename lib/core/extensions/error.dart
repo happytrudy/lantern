@@ -9,7 +9,7 @@ extension ErrorExetension on Object {
       // radiance IPC wrapper (e.g. "ipc: status 401: actual error")
       // so only the upstream error is kept.
       String description = _stripIpcPrefix(
-        (this as PlatformException).message ?? '',
+        (this as PlatformException).message ?? (this as PlatformException).code,
       );
       final privateServerError = _privateServerError(description);
       if (privateServerError != null) return privateServerError.i18n;
@@ -152,6 +152,16 @@ final List<(RegExp, String)> _vpnErrorPatterns = [
 
 String? _classifyVpnError(String description) {
   if (description.isEmpty) return null;
+  // Preserve the native service diagnosis before broad network/tunnel patterns
+  // match the underlying error (such as an IPC timeout).
+  for (final key in [
+    'windows_service_missing_binary',
+    'windows_service_permission_required',
+    'windows_service_start_failed',
+    'windows_service_not_ready',
+  ]) {
+    if (description.contains(key)) return key;
+  }
   for (final (pattern, key) in _vpnErrorPatterns) {
     if (pattern.hasMatch(description)) return key;
   }

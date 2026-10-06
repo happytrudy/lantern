@@ -2024,3 +2024,15 @@ msgstr "The management server's TLS certificate could not be verified. Check its
 
 msgid "private_server_owner_token_invalid"
 msgstr "Sharing requires a valid administrator access token. Please add this server again using its administrator token."
+
+msgid "windows_service_missing_binary"
+msgstr "The VPN backend file is missing. Extract the complete Windows package or reinstall the app."
+
+msgid "windows_service_permission_required"
+msgstr "Windows administrator approval is required to install or start the VPN service. Click Connect again and approve the Windows prompt."
+
+msgid "windows_service_start_failed"
+msgstr "The Windows VPN service could not start. Reinstall the app and check the local logs for details."
+
+msgid "windows_service_not_ready"
+msgstr "The Windows VPN service is not responding. Wait a moment and try again, or reinstall the app."

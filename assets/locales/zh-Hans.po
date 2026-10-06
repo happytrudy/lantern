@@ -2022,3 +2022,15 @@ msgstr "无法验证管理服务的 TLS 证书，请检查服务器证书和配�
 
 msgid "private_server_owner_token_invalid"
 msgstr "分享需要有效的管理员访问令牌，请使用此服务器的管理员令牌重新添加。"
+
+msgid "windows_service_missing_binary"
+msgstr "VPN 后台程序文件缺失，请完整解压 Windows 软件包或重新安装。"
+
+msgid "windows_service_permission_required"
+msgstr "安装或启动 VPN 服务需要 Windows 管理员授权，请再次点击连接并允许 Windows 授权提示。"
+
+msgid "windows_service_start_failed"
+msgstr "Windows VPN 服务启动失败，请重新安装，并查看本地日志中的具体原因。"
+
+msgid "windows_service_not_ready"
+msgstr "Windows VPN 后台服务未响应，请稍后重试或重新安装。"

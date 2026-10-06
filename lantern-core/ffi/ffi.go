@@ -1304,6 +1304,9 @@ func addServerManagerInstance(_ip, _port, _accessToken, _tag *C.char) *C.char {
 		if errStr != nil {
 			return errStr
 		}
+		if err := checkDaemonReachable(c); err != nil {
+			return SendError(err)
+		}
 		if err := c.AddServerManagerInstance(ip, port, accessToken, tag, &ffiPrivateServerEventListener{}); err != nil {
 			return SendError(err)
 		}
@@ -1358,6 +1361,9 @@ func addServerBasedOnURLs(_urls *C.char, _skipCertVerification C.int) *C.char {
 		c, errStr := requireCore()
 		if errStr != nil {
 			return errStr
+		}
+		if err := checkDaemonReachable(c); err != nil {
+			return SendError(err)
 		}
 		slog.Debug("Adding server based on URLs:", "urls", urls, "skipCertVerification", skipCertVerification)
 		bytes, err := c.AddServersByURL(urls, skipCertVerification)

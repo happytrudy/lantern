@@ -117,6 +117,9 @@ jobs:
         with:
           cache-scope: manual-release-windows
 
+      - name: Test Windows VPN service lifecycle
+        run: go test ./lantern-core/windows_service
+
       - name: Set up Flutter
         uses: ./.github/actions/setup-flutter
 
@@ -173,6 +176,9 @@ jobs:
           APP_VERSION: ${{ inputs.version }}
         run: make windows-release APP_VERSION=$env:APP_VERSION BUILD_TYPE=production INSTALLER_NAME=lantern-installer
 
+      - name: Test Windows connection error translations
+        run: flutter test --no-pub test/core/extensions/windows_service_error_test.dart
+
       - name: Package Windows installer
         shell: pwsh
         env:
@@ -192,7 +198,14 @@ jobs:
 
       - name: Create portable ZIP
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath lantern-windows-portable.zip -Force
+        run: |
+          $bundle = 'build/windows/x64/runner/Release'
+          foreach ($file in @('lantern.exe', 'liblantern.dll', 'lanternd.exe')) {
+            if (-not (Test-Path (Join-Path $bundle $file) -PathType Leaf)) {
+              throw "Windows bundle is missing $file"
+            }
+          }
+          Compress-Archive -Path "$bundle/*" -DestinationPath lantern-windows-portable.zip -Force
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
