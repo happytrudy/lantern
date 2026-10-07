@@ -117,9 +117,6 @@ jobs:
         with:
           cache-scope: manual-release-windows
 
-      - name: Test Windows VPN service lifecycle
-        run: go test ./lantern-core/windows_service
-
       - name: Set up Flutter
         uses: ./.github/actions/setup-flutter
 
@@ -129,6 +126,12 @@ jobs:
       - name: Set up MinGW
         shell: bash
         run: bash ./scripts/ci/setup-windows-toolchain.sh
+
+      - name: Test Windows VPN service and IPC permissions
+        shell: pwsh
+        run: |
+          go test ./lantern-core/windows_service
+          go test github.com/getlantern/radiance/ipc
 
       - name: Install Inno Setup
         shell: bash

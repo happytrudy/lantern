@@ -1,0 +1,9 @@
+build/**
+.salt
+.userData
+config/proxy.conf
+.vscode/**
+
+# kindling-tester local env files
+cmd/kindling-tester/.env
+cmd/kindling-tester/.env.local

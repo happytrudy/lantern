@@ -1,0 +1,489 @@
+// Package settings provides a simple interface for storing and retrieving user settings.
+package settings
+
+import (
+	jsonpkg "encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"log/slog"
+	"maps"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/knadh/koanf/parsers/json"
+	"github.com/knadh/koanf/providers/rawbytes"
+	"github.com/knadh/koanf/v2"
+
+	"github.com/getlantern/radiance/common/atomicfile"
+	"github.com/getlantern/radiance/common/fileperm"
+)
+
+type _key string
+
+const (
+	// Keys for various settings.
+	// General settings keys.
+	DataPathKey    _key = "data_path"    // string
+	LogPathKey     _key = "log_path"     // string
+	LogLevelKey    _key = "log_level"    // string
+	CountryCodeKey _key = "country_code" // string
+	LocaleKey      _key = "locale"       // string
+	DeviceIDKey    _key = "device_id"    // string/int
+
+	// Application behavior related keys.
+	TelemetryKey _key = "telemetry_enabled" // bool
+
+	// User account related keys.
+	EmailKey         _key = "email"          // string
+	UserIDKey        _key = "user_id"        // string
+	UserLevelKey     _key = "user_level"     // string
+	TokenKey         _key = "token"          // string
+	JwtTokenKey      _key = "jwt_token"      // string
+	DevicesKey       _key = "devices"        // []Device
+	UserDataKey      _key = "user_data"      // [account.UserData]
+	OAuthLoginKey    _key = "oauth_login"    // bool
+	OAuthProviderKey _key = "oauth_provider" // string (e.g. "google", "apple", "email")
+
+	// VPN related keys.
+	SmartRoutingKey      _key = "smart_routing"       // bool
+	SplitTunnelKey       _key = "split_tunnel"        // bool
+	SplitTunnelPolicyKey _key = "split_tunnel_policy" // string ("exclude"|"include")
+	AdBlockKey           _key = "ad_block"            // bool
+	AutoConnectKey       _key = "auto_connect"        // bool
+	PeerShareEnabledKey  _key = "peer_share_enabled"  // bool
+	// PeerManualPortKey is the TCP port number the user has manually
+	// forwarded on their router for the peer-proxy inbound (single-
+	// port 1:1 NAT). Valid range is 1..65535; 0 means unset.
+	PeerManualPortKey _key = "peer_manual_port" // int (0 = unset; 1..65535 = manual port)
+	// UnboundedKey is the local opt-in (bool) for the Unbounded widget proxy.
+	UnboundedKey      _key = "unbounded"       // bool
+	SelectedServerKey _key = "selected_server" // [servers.Server] Server.Options is not stored
+
+	PreferredLocationKey _key = "preferred_location" // [common.PreferredLocation]
+
+	settingsFileName = "settings.json"
+	// legacySettingsFileName is what v9.0.x called the same file (it was
+	// renamed). On upgrade from v9.0.x, the user's
+	// persisted user_id / token / user_level live at <dataDir>/local.json;
+	// migrateLegacySettingsIfNeeded reads it from there so Pro state
+	// survives the rename.
+	legacySettingsFileName = "local.json"
+
+	settingsInvalidFileName = "settings.invalid.json"
+
+	// Development only keys
+	ConfigFetchDisabledKey        _key = "config_fetch_disabled"     // bool
+	FeatureOverridesKey           _key = "feature_overrides"         // string
+	AdmissionRejectionDisabledKey _key = "admission_reject_disabled" // bool
+)
+
+var ErrNotExist = errors.New("key does not exist")
+
+// errParseSettings marks a settings file that exists but isn't valid JSON. It
+// distinguishes a recoverable invalid file (quarantine + start from defaults)
+// from a genuine read failure, which stays fatal.
+var errParseSettings = errors.New("settings file is not valid JSON")
+
+func (k _key) String() string { return string(k) }
+
+type settings struct {
+	k           *koanf.Koanf
+	initialized bool
+	filePath    string
+	mu          sync.Mutex
+}
+
+var k = &settings{
+	k: koanf.New("."),
+}
+
+func init() {
+	// set default values.
+	k.k.Set(LocaleKey.String(), "fa-IR")
+	k.k.Set(UserLevelKey.String(), "free")
+}
+
+// InitSettings initializes the config for user settings.
+func InitSettings(fileDir string) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.initialized {
+		return nil
+	}
+	if err := os.MkdirAll(fileDir, 0755); err != nil {
+		return fmt.Errorf("failed to create data directory: %v", err)
+	}
+	k.filePath = filepath.Join(fileDir, settingsFileName)
+	migrateLegacySettingsIfNeeded(fileDir, k.filePath)
+	switch err := loadSettings(k.filePath); {
+	case errors.Is(err, fs.ErrNotExist):
+		slog.Warn("settings file not found", "path", k.filePath) // file may not have been created yet
+		if err := save(); err != nil {
+			return err
+		}
+	case errors.Is(err, errParseSettings):
+		// An invalid settings file must not be fatal: quarantine it, then start
+		// from in-memory defaults and overwrite the bad file with them.
+		slog.Error("Settings file is invalid; starting from defaults", "path", k.filePath, "error", err)
+		quarantineInvalidSettings(k.filePath)
+		if err := save(); err != nil {
+			return err
+		}
+	case err != nil:
+		return fmt.Errorf("loading settings: %w", err)
+	}
+	k.initialized = true
+	return nil
+}
+
+// candidateSource is one possible location of persisted user state.
+// contents is always canonical JSON — direct for v9.x, translated for
+// pre-9.x YAML.
+type candidateSource struct {
+	path     string
+	contents []byte
+	exists   bool
+	label    string
+}
+
+// migrateLegacySettingsIfNeeded recovers persisted user state written
+// by older client versions. Candidates in priority order:
+//
+//  1. <fileDir>/settings.json                 — canonical
+//  2. <fileDir>/local.json                    — v9.0.x (renamed)
+//  3. Windows ${PUBLIC}\Lantern\data\*        — v9.0.x cross-dir;
+//     spliced in below, Windows only
+//  4. pre-9.x platform-specific YAML; spliced in below
+//  5. <fileDir>/data/settings.json            — v9.1.x (bugged:
+//     setupDirectories appended an
+//     unconditional "/data" suffix)
+//
+// Pick the highest-priority candidate with user_level=="pro"; if none
+// is pro, the highest-priority candidate that exists. Losing Pro is
+// recoverable; losing the device registration creates server-side
+// orphans, so identifier continuity wins ties.
+func migrateLegacySettingsIfNeeded(fileDir, canonicalPath string) {
+	candidates := []candidateSource{
+		{path: canonicalPath, label: "canonical settings.json"},
+		{path: filepath.Join(fileDir, legacySettingsFileName), label: "v9.0.x local.json"},
+		{path: filepath.Join(fileDir, "data", settingsFileName), label: "v9.1.x data/settings.json"},
+	}
+	for i := range candidates {
+		b, err := os.ReadFile(candidates[i].path)
+		switch {
+		case err == nil:
+			candidates[i].contents = b
+			candidates[i].exists = true
+		case errors.Is(err, fs.ErrNotExist):
+			// Expected — file just isn't there. Treat as not-present.
+		default:
+			// Permission / I/O error — log it but don't bail outright. If
+			// it's the canonical path that's unreadable for non-ENOENT
+			// reasons, skip migration entirely so we don't try to write
+			// over a file the OS is telling us we can't see; for legacy
+			// or nested paths, treat the same as not-present.
+			slog.Warn("legacy settings migration: read failed",
+				"path", candidates[i].path, "error", err)
+			if candidates[i].path == canonicalPath {
+				return
+			}
+		}
+	}
+	// Optional candidates splice in at index 2, inserted oldest-first so
+	// newer generations end up higher priority.
+	if yc := legacyYAMLCandidate(fileDir); yc.exists {
+		candidates = append(candidates[:2], append([]candidateSource{yc}, candidates[2:]...)...)
+	}
+	// Windows v9.0.x cross-dir candidates (${PUBLIC}\Lantern\data) are the
+	// same generation of state as the same-dir local.json, just stored
+	// under a different filesystem root because lanternd's data dir moved
+	// to ${ProgramData}\Lantern. On every other GOOS / when the
+	// env is unset windowsCrossDirCandidatesFn returns nil and this is a
+	// no-op.
+	if winExtras := windowsCrossDirCandidatesFn(fileDir); len(winExtras) > 0 {
+		candidates = append(candidates[:2], append(winExtras, candidates[2:]...)...)
+	}
+
+	// Pick: highest-priority file with user_level=="pro"; if none has pro,
+	// highest-priority file that exists at all (with non-empty contents).
+	pickIdx := -1
+	for i, c := range candidates {
+		if c.exists && userLevelInJSON(c.contents) == "pro" {
+			pickIdx = i
+			break
+		}
+	}
+	if pickIdx == -1 {
+		for i, c := range candidates {
+			if c.exists {
+				pickIdx = i
+				break
+			}
+		}
+	}
+	if pickIdx == -1 {
+		// Nothing on disk yet — fresh install, normal path. No-op.
+		return
+	}
+	if candidates[pickIdx].path == canonicalPath {
+		// Canonical already wins — no migration needed.
+		return
+	}
+	writeMigrated(canonicalPath, candidates[pickIdx].contents, candidates[pickIdx].label)
+}
+
+// writeMigrated overwrites the canonical settings file with the recovered
+// contents and logs the outcome. Uses atomicfile.WriteFile (the same
+// mechanism the normal save path uses) so a crash mid-write can't leave
+// a half-written settings.json on disk. Errors are logged-and-swallowed:
+// if the write fails the caller falls through to the fresh-install path,
+// which is a worse UX but not a corruption risk.
+func writeMigrated(canonicalPath string, contents []byte, source string) {
+	if err := atomicfile.WriteFile(canonicalPath, contents, fileperm.File); err != nil {
+		slog.Warn("legacy settings migration: write failed",
+			"dst", canonicalPath, "source", source, "error", err)
+		return
+	}
+	slog.Info("legacy settings migration: recovered persisted state",
+		"dst", canonicalPath, "source", source, "bytes", len(contents))
+}
+
+// userLevelInJSON returns the value of the "user_level" key from a JSON
+// settings blob, or "" if the key is missing / the blob is malformed.
+// Lightweight extraction so the migration doesn't need to load the full
+// koanf state machine before we've decided which file to read.
+func userLevelInJSON(contents []byte) string {
+	var s struct {
+		UserLevel string `json:"user_level"`
+	}
+	if err := jsonpkg.Unmarshal(contents, &s); err != nil {
+		return ""
+	}
+	return s.UserLevel
+}
+
+// loadSettings applies the file to the in-memory settings.
+//
+// Koanf parses before taking its write lock, so malformed files leave the live settings untouched.
+// Without opts the file merges over current settings; pass replaceAll when omitted keys must be
+// dropped.
+func loadSettings(path string, opts ...koanf.Option) error {
+	contents, err := atomicfile.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("loading settings: %w", err)
+	}
+	if err := k.k.Load(rawbytes.Provider(contents), json.Parser(), opts...); err != nil {
+		return fmt.Errorf("parsing settings: %w", errors.Join(errParseSettings, err))
+	}
+	return nil
+}
+
+// replaceAll makes a koanf load overwrite rather than merge, so keys the source omits are dropped.
+//
+// Koanf re-flattens dest after this returns, so dest must be mutated in place; replacing the map
+// header would silently lose the load.
+func replaceAll(src, dest map[string]any) error {
+	clear(dest)
+	maps.Copy(dest, src)
+	return nil
+}
+
+// quarantineInvalidSettings copies an invalid settings file aside to
+// settings.invalid.json so a fresh default file can replace it in place while
+// the original remains available for diagnostics.
+func quarantineInvalidSettings(path string) {
+	rawSettings, err := atomicfile.ReadFile(path)
+	if err != nil {
+		slog.Error("reading invalid settings for quarantine", "path", path, "error", err)
+		return
+	}
+	invalidPath := filepath.Join(filepath.Dir(path), settingsInvalidFileName)
+	if err := atomicfile.WriteFile(invalidPath, rawSettings, fileperm.File); err != nil {
+		slog.Error("writing invalid settings copy", "path", invalidPath, "error", err)
+		return
+	}
+	slog.Warn("quarantined invalid settings for diagnostics", "path", invalidPath)
+}
+
+func Get(key _key) any {
+	return k.k.Get(key.String())
+}
+
+func GetString(key _key) string {
+	// JSON round-trip turns all numbers into float64 and since koanf uses Sprintf("%v") for string
+	// conversion, large integers (i.e. userID) get converted to scientific notation (e.g. 3.87286618e+08)
+	// so we handle float64 separately
+	value := Get(key)
+	if value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	case string:
+		return v
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func GetBool(key _key) bool {
+	return k.k.Bool(key.String())
+}
+
+func GetInt(key _key) int {
+	return k.k.Int(key.String())
+}
+
+func GetInt64(key _key) int64 {
+	return k.k.Int64(key.String())
+}
+
+func GetFloat64(key _key) float64 {
+	return k.k.Float64(key.String())
+}
+
+func GetStringSlice(key _key) []string {
+	return k.k.Strings(key.String())
+}
+
+func GetDuration(key _key) time.Duration {
+	return k.k.Duration(key.String())
+}
+
+func GetStruct(key _key, out any) error {
+	return k.k.Unmarshal(key.String(), out)
+}
+
+func Exists(key _key) bool {
+	return k.k.Exists(key.String())
+}
+
+func Set(key _key, value any) error {
+	// take lock for the entire duration of the Set + save sequence to prevent multiple Set
+	// calls from interleaving and leaving the file in an inconsistent state until the next write.
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	err := k.k.Set(key.String(), value)
+	if err != nil {
+		return fmt.Errorf("could not set key %s: %w", key, err)
+	}
+	return save()
+}
+
+func Clear(keys ..._key) error {
+	// take lock for the entire duration. See [Set] for explanation.
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	for _, key := range keys {
+		k.k.Delete(key.String())
+	}
+	return save()
+}
+
+type Settings map[_key]any
+
+func (s Settings) Diff(s2 Settings) Settings {
+	diff := make(Settings)
+	for k, v1 := range s {
+		if v2, ok := s2[k]; !ok || v1 != v2 {
+			diff[k] = v1
+		}
+	}
+	return diff
+}
+
+func GetAll() Settings {
+	s := make(Settings)
+	for key, value := range k.k.All() {
+		s[_key(key)] = value
+	}
+	return s
+}
+
+func GetAllFor(keys ..._key) Settings {
+	if len(keys) == 0 {
+		return GetAll()
+	}
+	s := make(Settings)
+	for _, key := range keys {
+		s[key] = k.k.Get(key.String())
+	}
+	return s
+}
+
+// Patch takes a map of settings to update and applies them all at once.
+func Patch(updates Settings) error {
+	// take lock for the entire duration. See [Set] for explanation.
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	for key, value := range updates {
+		if err := k.k.Set(_key(key).String(), value); err != nil {
+			return fmt.Errorf("could not set key %s: %w", key, err)
+		}
+	}
+	return save()
+}
+
+func save() error {
+	out, err := k.k.Marshal(json.Parser())
+	if err != nil {
+		return fmt.Errorf("could not marshal koanf file: %w", err)
+	}
+
+	err = atomicfile.WriteFile(k.filePath, out, fileperm.File)
+	if err != nil {
+		return fmt.Errorf("could not write koanf file: %w", err)
+	}
+	return nil
+}
+
+// Reset clears the current settings in memory primarily for testing purposes.
+func Reset() {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.k = koanf.New(".")
+	k.initialized = false
+}
+
+// Reload re-reads the settings file, adopting values written by another process.
+//
+// Mobile keeps the tunnel in a separate process that persists to the same file, so long-lived
+// callers must reload before using cross-process metadata. The file supersedes memory rather than
+// merging over it, so keys removed by another process do not linger. A missing file is not an
+// error, and failed reloads leave the current settings untouched.
+func Reload() error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if !k.initialized {
+		return errors.New("settings not initialized")
+	}
+	switch err := loadSettings(k.filePath, koanf.WithMergeFunc(replaceAll)); {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	case err != nil:
+		return fmt.Errorf("reloading settings: %w", err)
+	}
+	return nil
+}
+
+func IsPro() bool {
+	return strings.ToLower(GetString(UserLevelKey)) == "pro"
+}
+
+// Device is a machine registered to a user account (e.g. an Android phone or a Windows desktop).
+type Device struct {
+	ID   string
+	Name string
+}
+
+func Devices() ([]Device, error) {
+	devices := []Device{}
+	err := GetStruct(DevicesKey, &devices)
+	return devices, err
+}
