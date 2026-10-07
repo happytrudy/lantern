@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -22,7 +23,6 @@ import (
 
 	C "github.com/getlantern/common"
 	wire "github.com/getlantern/common/usermessage"
-	"github.com/getlantern/publicip"
 
 	"github.com/getlantern/radiance/account"
 	"github.com/getlantern/radiance/common"
@@ -47,6 +47,22 @@ import (
 )
 
 const tracerName = "github.com/getlantern/radiance/backend"
+
+// selfHostedOnly is intentionally a compile-time policy for this fork. The
+// backend must never download the upstream config, account data, telemetry
+// settings, or peer-share state. All usable servers come from the local
+// server manager and are added explicitly by the user.
+const selfHostedOnly = true
+
+type blockedHTTPTransport struct{}
+
+func (blockedHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("network access to official Lantern services is disabled")
+}
+
+func selfHostedHTTPClient() *http.Client {
+	return &http.Client{Transport: blockedHTTPTransport{}}
+}
 
 // LocalBackend ties all the core functionality of Radiance together. It manages the configuration,
 // servers, VPN connection, account management, issue reporting, and telemetry for the application.
@@ -169,15 +185,18 @@ func NewLocalBackend(ctx context.Context, opts Options) (*LocalBackend, error) {
 	}
 
 	dataDir := settings.GetString(settings.DataPathKey)
-	disableFetch := env.GetBool(env.DisableFetch)
+	// Config and telemetry are disabled unconditionally in the self-hosted
+	// build. Do not honor a persisted or environment override that could
+	// silently re-enable upstream traffic.
 	settings.Patch(settings.Settings{
 		settings.LocaleKey:              opts.Locale,
 		settings.DeviceIDKey:            platformDeviceID,
-		settings.ConfigFetchDisabledKey: disableFetch,
-		settings.TelemetryKey:           opts.TelemetryConsent,
+		settings.ConfigFetchDisabledKey: true,
+		settings.TelemetryKey:           false,
 	})
 
-	accountClient := account.NewClient(kindling.HTTPClient(), dataDir)
+	httpClient := selfHostedHTTPClient()
+	accountClient := account.NewClient(httpClient, dataDir)
 
 	svrMgr, err := servers.NewManager(
 		dataDir, slog.Default().With("service", "server_manager"),
@@ -203,24 +222,22 @@ func NewLocalBackend(ctx context.Context, opts Options) (*LocalBackend, error) {
 	// Degraded, not fatal, per the invariant above: a nil peerClient only
 	// disables Share My Connection, and must not cost the user their ability
 	// to report an issue. applyPeerShare and PeerStatus handle nil.
-	peerClient, err := newPeerClient(platformDeviceID)
-	if err != nil {
-		slog.Error("Loading peer client", "error", err)
-	}
+	var peerClient peerController
 
 	ctx, cancel := context.WithCancel(ctx)
 	cOpts := config.Options{
 		DataPath:      dataDir,
 		Locale:        opts.Locale,
 		AccountClient: accountClient,
-		HTTPClient:    kindling.HTTPClient(),
+		HTTPClient:    httpClient,
 		Logger:        slog.Default().With("service", "config_handler"),
+		DisableFetch:  true,
 	}
 	r := &LocalBackend{
 		ctx:               ctx,
 		cancel:            cancel,
-		issueReporter:     issue.NewIssueReporter(kindling.HTTPClient()),
-		selectionReporter: newSelectionReporter(kindling.HTTPClient()),
+		issueReporter:     issue.NewIssueReporter(httpClient),
+		selectionReporter: newSelectionReporter(httpClient),
 		accountClient:     accountClient,
 		confHandler:       config.NewConfigHandler(ctx, cOpts),
 		srvManager:        svrMgr,
@@ -236,7 +253,9 @@ func NewLocalBackend(ctx context.Context, opts Options) (*LocalBackend, error) {
 	}
 	r.sessionHistory = vpn.NewSessionHistory(slog.Default().With("service", "session_history"), r.sessionInfo())
 	r.shutdownFuncs = append(r.shutdownFuncs, func() error { r.sessionHistory.Close(); return nil })
-	r.userMessages = loadUserMessageService(opts.UserMessageCapabilities, dataDir)
+	// User messages are an upstream account feature and are deliberately not
+	// initialized in this build.
+	r.userMessages = nil
 	r.clearSelectedIfMissing()
 	return r, nil
 }
@@ -253,7 +272,7 @@ func loadUserMessageService(capabilities wire.ClientCapabilities, dataDir string
 	service, err := clientmessage.New(clientmessage.Options{
 		DataDir: dataDir,
 		Fetcher: clientmessage.NewHTTPFetcher(
-			kindling.HTTPClient(),
+			selfHostedHTTPClient(),
 			clientmessage.Endpoint(common.GetBaseURL()),
 			capabilities,
 		),
@@ -275,65 +294,24 @@ func loadUserMessageService(capabilities wire.ClientCapabilities, dataDir string
 }
 
 func (r *LocalBackend) Start() {
-	// eagerly start kindling so it's ready by the time we need to make network requests
-	kindling.Init()
-	r.startUserMessages()
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		result, err := publicip.Detect(ctx, &publicip.Config{
-			Timeout:      2 * time.Second,
-			MinConsensus: 1,
-			Methods:      publicip.DefaultMethods(),
-		})
-		cancel()
-		if err != nil {
-			slog.Warn("Failed to get public IP", "error", err)
-		} else {
-			common.SetPublicIP(result.IP.String())
-			// IP intentionally omitted — Lantern users in censored regions
-			// can't safely have their public IP in routinely-collected
-			// client logs. Confidence + sources are enough for operator
-			// triage; the actual IP is correlated server-side via traces.
-			slog.Info("Detected public IP", "confidence", result.Confidence, "sources", result.Sources)
-		}
-	}()
-
-	if settings.GetBool(settings.TelemetryKey) {
-		if err := r.startTelemetry(); err != nil {
-			slog.Error("Failed to start telemetry", "error", err)
-		}
-	}
 	r.startVPNStatusListeners()
 	r.startAutoSelectedListener()
 	r.startSessionAutoSelectListener()
-
-	r.resumePeerShareIfEnabled()
-
-	// Wire the broflake / Unbounded widget proxy lifecycle to config
-	// updates. This single subscription handles all three start/stop
-	// triggers (local toggle, server feature flag, server-supplied
-	// config); InitSubscription is sync.Once-guarded so a future Start
-	// retry after Close won't double-subscribe.
-	//
-	// Seed with the already-cached config (loaded from disk before
-	// Start runs) so an opted-in user auto-starts the widget on
-	// launch instead of waiting for the next config refresh.
-	cachedCfg, _ := r.confHandler.GetConfig()
-	unbounded.InitSubscription(cachedCfg)
-
-	// The server derives the country from the client IP, so it's stable for the
-	// session: react once to record it for issue reports.
-	events.SubscribeOnce(func(evt config.NewConfigEvent) {
-		setCountryCodeFromConfig(evt.New)
-	})
-	events.SubscribeContext(r.ctx, func(evt config.NewConfigEvent) {
-		r.applyConfig(evt.New)
-		go r.prewarmOfflineURLTests("config update")
-	})
-	if r.applyCurrentConfig() {
-		go r.prewarmOfflineURLTests("cached config")
+	// The private-server manager is the only source of selectable servers.
+	// Purge servers imported by earlier upstream config versions before the
+	// UI reads the list or auto-select builds tunnel outbounds.
+	var upstreamTags []string
+	for _, server := range r.srvManager.AllServers() {
+		if server.IsLantern {
+			upstreamTags = append(upstreamTags, server.Tag)
+		}
 	}
-	r.confHandler.Start()
+	if len(upstreamTags) > 0 {
+		if _, err := r.srvManager.RemoveServers(upstreamTags); err != nil {
+			slog.Error("Removing previously imported upstream servers", "error", err)
+		}
+	}
+	r.clearSelectedIfMissing()
 }
 
 // applyCurrentConfig applies any config already loaded from disk before the
@@ -555,13 +533,13 @@ func (r *LocalBackend) buildIssueReportMetadata() issueReportMetadata {
 	}
 
 	if r == nil {
-		meta.reporter = issue.NewIssueReporter(kindling.HTTPClient())
+		meta.reporter = issue.NewIssueReporter(selfHostedHTTPClient())
 		return meta
 	}
 	if r.issueReporter != nil {
 		meta.reporter = r.issueReporter
 	} else {
-		meta.reporter = issue.NewIssueReporter(kindling.HTTPClient())
+		meta.reporter = issue.NewIssueReporter(selfHostedHTTPClient())
 	}
 	if r.deviceID != "" {
 		meta.deviceID = r.deviceID
@@ -657,26 +635,14 @@ func (r *LocalBackend) UpdateConfig() error {
 // Features returns the features available in the current configuration, returned from the server in the
 // config response.
 func (r *LocalBackend) Features() map[string]bool {
-	_, span := otel.Tracer(tracerName).Start(context.Background(), "features")
-	defer span.End()
-	cfg, err := r.confHandler.GetConfig()
-	if err != nil {
-		slog.Info("Failed to get config for features", "error", err)
-		return map[string]bool{}
-	}
-	if cfg == nil {
-		slog.Info("No config available for features, returning empty map")
-		return map[string]bool{}
-	}
-	slog.Debug("Returning features from config", "features", cfg.Features)
-	if cfg.Features == nil {
-		slog.Info("No features available in config, returning empty map")
-		return map[string]bool{}
-	}
-	return cfg.Features
+	return map[string]bool{}
 }
 
 func (r *LocalBackend) PatchSettings(updates settings.Settings) error {
+	// Ignore any stale UI or IPC attempt to opt in to upstream telemetry.
+	if _, ok := updates[settings.TelemetryKey]; ok {
+		updates[settings.TelemetryKey] = false
+	}
 	curr := settings.GetAllFor(slices.Collect(maps.Keys(updates))...)
 	diff := updates.Diff(curr)
 	slog.Log(nil, log.LevelTrace, "Patching settings", "updates", updates, "current", curr, "diff", diff)
@@ -696,17 +662,6 @@ func (r *LocalBackend) PatchSettings(updates settings.Settings) error {
 	if _, ok := diff[settings.LocaleKey]; ok {
 		r.RefreshUserMessages()
 	}
-	// telemetry settings
-	if _, ok := diff[settings.TelemetryKey]; ok {
-		if settings.GetBool(settings.TelemetryKey) {
-			if err := r.startTelemetry(); err != nil {
-				slog.Error("Failed to start telemetry", "error", err)
-			}
-		} else {
-			r.stopTelemetry()
-		}
-	}
-
 	// vpn settings
 	//
 	// settings.Patch above already persisted the whole diff, so an early return
@@ -1276,9 +1231,6 @@ func (r *LocalBackend) awaitConnectable(ctx context.Context, tag string) error {
 // connectable reports whether a connect can proceed right now: either a config
 // has been loaded, or the user has a server of their own to dial without one.
 func (r *LocalBackend) connectable(tag string) bool {
-	if _, err := r.confHandler.GetConfig(); err == nil {
-		return true
-	}
 	if tag != vpn.AutoSelectTag {
 		_, found := r.srvManager.GetServerByTag(tag)
 		return found
@@ -1287,8 +1239,9 @@ func (r *LocalBackend) connectable(tag string) bool {
 }
 
 func (r *LocalBackend) getBoxOptions() vpn.BoxOptions {
-	// ignore error, we can still connect with default options if config is not available for some reason
-	cfg, _ := r.confHandler.GetConfig()
+	// Ignore all cached upstream config. A user-provided server is the only
+	// outbound source in this fork.
+	var cfg *config.Config
 	bOptions := vpn.BoxOptions{
 		BasePath: settings.GetString(settings.DataPathKey),
 	}
@@ -1563,17 +1516,13 @@ func (r *LocalBackend) ClearTunnelCache() error {
 }
 
 func (r *LocalBackend) RunOfflineURLTests() error {
-	cfg, err := r.confHandler.GetConfig()
-	if err != nil {
-		return fmt.Errorf("no config available: %w", err)
-	}
 	svrs := r.srvManager.AllServers()
-	slog.Debug("Running offline URL tests", "server_count", len(svrs), "url_override_count", len(cfg.BanditURLOverrides))
+	slog.Debug("Running offline server latency tests", "server_count", len(svrs))
 	results, err := r.vpnClient.RunOfflineURLTests(
 		r.ctx,
 		settings.GetString(settings.DataPathKey),
 		servers.ServerList{Servers: svrs}.Outbounds(),
-		cfg.BanditURLOverrides,
+		nil,
 	)
 	if err != nil {
 		return err
@@ -1630,6 +1579,9 @@ func (g *exhaustionGate) allow() bool {
 }
 
 func (r *LocalBackend) refetchOnExhaustion() {
+	if selfHostedOnly {
+		return
+	}
 	if !r.exhaustionGate.allow() {
 		return
 	}
@@ -1730,6 +1682,13 @@ func (r *LocalBackend) DataCapUpdates() <-chan *account.DataCapInfo {
 func (r *LocalBackend) updateDataCapStream(status vpn.VPNStatus) {
 	r.dataCapMu.Lock()
 	defer r.dataCapMu.Unlock()
+	if selfHostedOnly {
+		if r.stopDataCap != nil {
+			r.stopDataCap()
+			r.stopDataCap = nil
+		}
+		return
+	}
 	if status == vpn.Connected {
 		if r.stopDataCap != nil {
 			return // already running

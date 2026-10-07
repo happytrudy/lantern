@@ -62,6 +62,10 @@ type Options struct {
 	AccountClient *account.Client
 	Logger        *slog.Logger
 	HTTPClient    *http.Client
+	// DisableFetch prevents loading cached upstream config and rejects every
+	// later fetch request. Self-hosted builds set this so old Lantern config
+	// files cannot inject official nodes after an upgrade.
+	DisableFetch bool
 }
 
 // ConfigHandler handles fetching the proxy configuration from the proxy server. It provides access
@@ -116,8 +120,10 @@ func NewConfigHandler(ctx context.Context, options Options) *ConfigHandler {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		ch.logger.Error("creating config directory", "error", err)
 	}
-	if err := ch.loadConfig(); err != nil {
-		ch.logger.Error("failed to load config", "error", err)
+	if !options.DisableFetch {
+		if err := ch.loadConfig(); err != nil {
+			ch.logger.Error("failed to load config", "error", err)
+		}
 	}
 	return ch
 }
@@ -159,7 +165,7 @@ func (ch *ConfigHandler) loadWGKey() (wgtypes.Key, error) {
 }
 
 func (ch *ConfigHandler) fetchConfig() error {
-	if settings.GetBool(settings.ConfigFetchDisabledKey) {
+	if ch.options.DisableFetch || settings.GetBool(settings.ConfigFetchDisabledKey) {
 		ch.logger.Info("config fetch disabled, skipping")
 		return nil
 	}
@@ -339,7 +345,7 @@ func (ch *ConfigHandler) fetchLoop(defaultPollInterval time.Duration) {
 // Fetch immediately fetches the latest config. It returns [ErrConfigFetchDisabled]
 // if config fetching is disabled in settings.
 func (ch *ConfigHandler) Fetch() error {
-	if settings.GetBool(settings.ConfigFetchDisabledKey) {
+	if ch.options.DisableFetch || settings.GetBool(settings.ConfigFetchDisabledKey) {
 		return ErrConfigFetchDisabled
 	}
 	if !ch.started.Load() {

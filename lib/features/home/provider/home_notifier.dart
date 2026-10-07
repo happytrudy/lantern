@@ -120,13 +120,6 @@ class HomeNotifier extends _$HomeNotifier {
     }
   }
 
-  /// Fetches the latest user data from the server if not cached locally.
-  Future<void> fetchUserDataIfNeeded() async {
-    appLogger.info("Checking if user data fetch is needed...");
-    appLogger.info("Fetching from Go (source-of-truth)...");
-    await refreshUser();
-  }
-
   /// Checks if the user is a Pro user and if the current device is added
   /// means user has logged in from this device before an did not logout.
   /// Updates the app settings accordingly and make user logged in automatically.

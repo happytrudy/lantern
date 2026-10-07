@@ -317,7 +317,6 @@ func (lc *LanternCore) initialize(opts *utils.Opts, eventEmitter utils.FlutterEv
 	go lc.listenUnboundedSnapshots()
 	go lc.listenPeerStatusEvents()
 	go lc.listenUserMessageAvailability()
-	go lc.fetchUserDataIfNeeded()
 
 	slog.Debug("LanternCore initialized successfully")
 	return nil

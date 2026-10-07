@@ -7,6 +7,7 @@ import 'package:lantern/core/common/common.dart';
 import 'package:lantern/core/models/lantern_status.dart';
 import 'package:lantern/core/models/notification_event.dart';
 import 'package:lantern/core/services/injection_container.dart';
+import 'package:lantern/core/services/local_storage_service.dart';
 import 'package:lantern/core/services/notification_service.dart';
 import 'package:lantern/core/services/rating_prompt_service.dart';
 import 'package:lantern/features/home/provider/app_setting_notifier.dart';
@@ -276,6 +277,13 @@ class VpnNotifier extends _$VpnNotifier {
     }
 
     state = VPNStatus.connecting;
+    if (location == ServerLocationType.privateServer) {
+      final restoreResult = await _restorePrivateServerRegistration(tag);
+      if (restoreResult != null) {
+        state = VPNStatus.disconnected;
+        return restoreResult;
+      }
+    }
     appLogger.debug("Connecting to server: $location with tag: $tag");
     final result = await ref
         .read(lanternServiceProvider)
@@ -284,6 +292,38 @@ class VpnNotifier extends _$VpnNotifier {
       state = VPNStatus.disconnected;
     }
     return result;
+  }
+
+  Future<Either<Failure, String>?> _restorePrivateServerRegistration(
+    String tag,
+  ) async {
+    Map<String, dynamic>? savedServer;
+    for (final server in sl<LocalStorageService>().getPrivateServers()) {
+      if (server['tag']?.toString() == tag) {
+        savedServer = server;
+        break;
+      }
+    }
+    if (savedServer == null) return null;
+
+    final ip = (savedServer['ip'] ?? '').toString().trim();
+    final port = (savedServer['port'] ?? '').toString().trim();
+    final accessToken =
+        (savedServer['access_token'] ?? savedServer['accessToken'] ?? '')
+            .toString()
+            .trim();
+    if (ip.isEmpty || port.isEmpty || accessToken.isEmpty) return null;
+
+    appLogger.info('Ensuring saved private server is registered: tag=$tag');
+    final result = await ref
+        .read(lanternServiceProvider)
+        .addServerManually(
+          ip: ip,
+          port: port,
+          accessToken: accessToken,
+          serverName: tag,
+        );
+    return result.fold((failure) => Left(failure), (_) => null);
   }
 
   Future<Left<Failure, String>?> _checkVpnConflict() async {

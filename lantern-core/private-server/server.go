@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"regexp"
 
 	"strconv"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/getlantern/radiance/ipc"
+	"github.com/getlantern/radiance/servers"
 
 	pcommon "github.com/getlantern/lantern-server-provisioner/common"
 	"github.com/getlantern/lantern-server-provisioner/digitalocean"
@@ -355,25 +355,12 @@ func AddServerManually(ip, port, accessToken, tag string, vpnClient *ipc.Client,
 		AccessToken: accessToken,
 		Tag:         tag,
 	}
-	provisionSession := &provisionSession{
-		client:    vpnClient,
-		eventSink: events,
-	}
-	storeSession(provisionSession)
-	location := getGeoInfo(ip)
-	_, _, _ = ParseLocation(location)
 	ctx := context.Background()
-	err = provisionSession.client.AddPrivateServer(ctx, resp.Tag, resp.ExternalIP, resp.Port, resp.AccessToken)
+	resp.Protocol, err = ensurePrivateServer(ctx, vpnClient, resp)
 	if err != nil {
 		return err
 	}
-	slog.Debug("Server manager instance added successfully", slog.String("tag", resp.Tag))
-	resp.Tag = tag
-	if server, found, err := vpnClient.GetServerByTag(ctx, tag); err == nil && found {
-		resp.Protocol = server.Type
-	}
 
-	resp.Location = location
 	server, jerr := json.Marshal(resp)
 	if jerr != nil {
 		slog.Error("Error marshalling server response", slog.Any("error", jerr))
@@ -383,30 +370,38 @@ func AddServerManually(ip, port, accessToken, tag string, vpnClient *ipc.Client,
 	return nil
 }
 
-type geoInfo struct {
-	CountryCode string `json:"countryCode"`
-	Country     string `json:"country"`
-	Region      string `json:"regionName"`
-	City        string `json:"city"`
+type privateServerRegistry interface {
+	GetServerByTag(context.Context, string) (*servers.Server, bool, error)
+	AddPrivateServer(context.Context, string, string, int, string) error
 }
 
-// getGeoInfo fetches geographical information for a given IP address using the ip-api.com service.
-func getGeoInfo(ip string) string {
-	slog.Debug("Fetching geo info for IP", slog.String("ip", ip))
-	resp, err := http.Get("http://ip-api.com/json/" + ip)
+func ensurePrivateServer(ctx context.Context, registry privateServerRegistry, server provisionerResponse) (string, error) {
+	existing, found, err := registry.GetServerByTag(ctx, server.Tag)
 	if err != nil {
-		slog.Error("Error fetching geo info", slog.Any("error", err))
-		return ""
+		return "", fmt.Errorf("failed to check existing server %q: %w", server.Tag, err)
 	}
-	defer resp.Body.Close()
+	if found {
+		slog.Debug("Server manager instance already registered", slog.String("tag", server.Tag))
+		return existing.Type, nil
+	}
 
-	var info geoInfo
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		slog.Error("Error decoding geo info response", slog.Any("error", err))
-		return ""
+	if err := registry.AddPrivateServer(ctx, server.Tag, server.ExternalIP, server.Port, server.AccessToken); err != nil {
+		// Another connection attempt may have restored the same server meanwhile.
+		if existing, found, checkErr := registry.GetServerByTag(ctx, server.Tag); checkErr == nil && found {
+			return existing.Type, nil
+		}
+		return "", err
 	}
-	slog.Debug("Geo info for IP", slog.String("ip", ip), slog.Any("info", info))
-	return fmt.Sprintf("%s - %s [%s]", info.Region, info.Country, info.CountryCode)
+
+	added, found, err := registry.GetServerByTag(ctx, server.Tag)
+	if err != nil {
+		return "", fmt.Errorf("failed to get added server %q: %w", server.Tag, err)
+	}
+	if !found {
+		return "", fmt.Errorf("server manager did not register server %q", server.Tag)
+	}
+	slog.Debug("Server manager instance added successfully", slog.String("tag", server.Tag))
+	return added.Type, nil
 }
 
 func convertStatusToJSON(status, data string) string {
