@@ -198,6 +198,11 @@ func (c *Client) RunOfflineURLTests(ctx context.Context) error {
 	return err
 }
 
+// TestServerLatenciesJSON returns fresh per-node URL-test delays as JSON.
+func (c *Client) TestServerLatenciesJSON(ctx context.Context) ([]byte, error) {
+	return c.do(ctx, http.MethodPost, vpnOfflineTestsEndpoint+"?results=true", nil)
+}
+
 ///////////////////////
 // Server selection  //
 ///////////////////////

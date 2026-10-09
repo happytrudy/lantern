@@ -212,11 +212,17 @@ class VpnNotifier extends _$VpnNotifier {
       // Smart Routing is the auto mode in the pure build. Re-probe every
       // configured self-hosted server for each connection request, then use
       // the lowest successful latency without requiring a preselected tag.
-      await ref
+      final probe = await ref
           .read(availableServersProvider.notifier)
-          .forceFetchAvailableServers();
-      final available = ref.read(availableServersProvider).value;
-      if (available == null || !available.hasUserServers) {
+          .probePrivateServers();
+      if (probe.isLeft()) {
+        state = VPNStatus.disconnected;
+        return probe.map((_) => 'ok');
+      }
+      final available = probe.getOrElse(
+        (_) => throw StateError('Expected probe results'),
+      );
+      if (!available.hasUserServers) {
         state = VPNStatus.disconnected;
         return Left(
           Failure(

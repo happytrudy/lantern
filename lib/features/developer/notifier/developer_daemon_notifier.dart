@@ -104,8 +104,8 @@ class DeveloperDaemonNotifier extends _$DeveloperDaemonNotifier {
   Future<Either<Failure, Unit>> sendConfigRequest() =>
       ref.read(lanternServiceProvider).sendConfigRequest();
 
-  Future<Either<Failure, Unit>> runURLTests() =>
-      ref.read(lanternServiceProvider).runURLTests();
+  Future<Either<Failure, Unit>> runURLTests() async =>
+      (await ref.read(lanternServiceProvider).runURLTests()).map((_) => unit);
 
   /// Pretty-printed JSON of current settings/env for the dev-mode "Show
   /// settings & env vars" dialog. Returns the first IPC error so callers

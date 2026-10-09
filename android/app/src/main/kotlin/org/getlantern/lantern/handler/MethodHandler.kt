@@ -1437,7 +1437,7 @@ class MethodHandler : FlutterPlugin,
             }
 
             Methods.RunURLTests.method -> {
-                scope.handleResult(result, "run_url_tests") {
+                scope.handleValue(result, "run_url_tests") {
                     Mobile.runURLTests()
                 }
             }

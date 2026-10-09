@@ -1543,12 +1543,12 @@ class MethodHandler {
   func runURLTests(result: @escaping FlutterResult) {
     Task {
       var error: NSError?
-      MobileRunURLTests(&error)
+      let json = MobileRunURLTests(&error)
       if let error {
         await self.handleFlutterError(error, result: result, code: "RUN_URL_TESTS_ERROR")
         return
       }
-      await MainActor.run { result("ok") }
+      await MainActor.run { result(json ?? "{}") }
     }
   }
 

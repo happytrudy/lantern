@@ -474,6 +474,15 @@ func (s *localapi) vpnClearTunnelCacheHandler(w http.ResponseWriter, r *http.Req
 }
 
 func (s *localapi) vpnOfflineTestsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("results") == "true" {
+		results, err := s.backend(r.Context()).TestServerLatencies(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, results)
+		return
+	}
 	if err := s.backend(r.Context()).RunOfflineURLTests(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

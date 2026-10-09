@@ -104,6 +104,7 @@ type App interface {
 	PatchEnvVars(map[string]string) (map[string]string, error)
 	GetEnvVars() map[string]string
 	RunOfflineURLTests() error
+	TestServerLatencies() ([]byte, error)
 	UpdateConfig() error
 	ClearTunnelCache() error
 	ReferralAttachment(referralCode string) (bool, error)
@@ -753,6 +754,10 @@ func (lc *LanternCore) GetEnvVars() map[string]string {
 		return nil
 	}
 	return vars
+}
+
+func (lc *LanternCore) TestServerLatencies() ([]byte, error) {
+	return lc.client.TestServerLatenciesJSON(lc.ctx)
 }
 
 func (lc *LanternCore) RunOfflineURLTests() error {

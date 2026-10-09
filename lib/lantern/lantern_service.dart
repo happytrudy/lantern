@@ -1025,7 +1025,7 @@ class LanternService implements LanternCoreService {
   }
 
   @override
-  Future<Either<Failure, Unit>> runURLTests() {
+  Future<Either<Failure, Map<String, int>>> runURLTests() {
     if (PlatformUtils.isFFISupported) {
       return _ffiService.runURLTests();
     }

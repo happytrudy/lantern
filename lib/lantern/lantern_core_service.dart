@@ -396,7 +396,7 @@ abstract class LanternCoreService {
 
   Future<Either<Failure, Map<String, String>>> getEnvVars();
 
-  Future<Either<Failure, Unit>> runURLTests();
+  Future<Either<Failure, Map<String, int>>> runURLTests();
 
   Future<Either<Failure, Unit>> sendConfigRequest();
 

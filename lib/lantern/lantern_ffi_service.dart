@@ -1947,7 +1947,7 @@ class LanternFFIService implements LanternCoreService {
   }
 
   @override
-  Future<Either<Failure, Unit>> runURLTests() async {
+  Future<Either<Failure, Map<String, int>>> runURLTests() async {
     try {
       final result = await runInBackground<String>(() async {
         final resultPtr = _ffiService.runURLTests();
@@ -1958,7 +1958,10 @@ class LanternFFIService implements LanternCoreService {
         }
       });
       checkAPIError(result);
-      return right(unit);
+      final decoded = jsonDecode(result) as Map<String, dynamic>;
+      return right(
+        decoded.map((tag, delay) => MapEntry(tag, (delay as num).toInt())),
+      );
     } catch (e, st) {
       appLogger.error('runURLTests error', e, st);
       return Left(e.toFailure());

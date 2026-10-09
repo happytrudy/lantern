@@ -1103,10 +1103,11 @@ func runURLTests() *C.char {
 		if errStr != nil {
 			return errStr
 		}
-		if err := c.RunOfflineURLTests(); err != nil {
+		data, err := c.TestServerLatencies()
+		if err != nil {
 			return SendError(err)
 		}
-		return C.CString("ok")
+		return C.CString(string(data))
 	})
 }
 

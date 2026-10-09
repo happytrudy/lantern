@@ -858,9 +858,10 @@ func GetEnvVars() (string, error) {
 	})
 }
 
-func RunURLTests() error {
-	return withCore(func(c lanterncore.Core) error {
-		return c.RunOfflineURLTests()
+func RunURLTests() (string, error) {
+	return withCoreR(func(c lanterncore.Core) (string, error) {
+		data, err := c.TestServerLatencies()
+		return string(data), err
 	})
 }
 

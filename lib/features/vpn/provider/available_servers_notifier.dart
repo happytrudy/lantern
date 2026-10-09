@@ -6,6 +6,7 @@ import 'package:lantern/core/common/common.dart';
 import 'package:lantern/core/models/available_servers.dart';
 import 'package:lantern/core/services/injection_container.dart' show sl;
 import 'package:lantern/core/services/local_storage_service.dart';
+import 'package:lantern/lantern/lantern_service_notifier.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'available_servers_notifier.g.dart';
@@ -15,6 +16,7 @@ const _availableServersSettleReloadDelay = Duration(seconds: 4);
 
 @Riverpod(keepAlive: true)
 class AvailableServersNotifier extends _$AvailableServersNotifier {
+  Map<String, int> _latencies = {};
   DateTime? _lastSettleReloadAt;
   Future<void>? _settleReload;
 
@@ -63,7 +65,7 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
             );
           }
         }
-        final delay = await _probePrivateServer(ip, port);
+        final delay = _latencies[tag];
         return Server(
           tag: tag,
           type: protocol,
@@ -83,7 +85,7 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
           ),
           selectionHistory: SelectionHistory(
             lastSuccessDelayMs: delay ?? 0,
-            consecutiveFailures: delay == null ? 1 : 0,
+            consecutiveFailures: 0,
           ),
         );
       }),
@@ -138,26 +140,50 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
     return null;
   }
 
-  Future<int?> _probePrivateServer(String ip, int port) async {
-    if (ip.isEmpty || port <= 0 || port > 65535) return null;
-    final stopwatch = Stopwatch()..start();
-    try {
-      // The self-hosted server manager speaks HTTPS. A raw TCP connect followed
-      // by an immediate close is not a valid probe and makes the server log a
-      // TLS handshake EOF for every Smart Routing attempt.
-      final socket = await SecureSocket.connect(
-        ip,
-        port,
-        onBadCertificate: (_) => true,
-        timeout: const Duration(seconds: 3),
-      );
-      stopwatch.stop();
-      await socket.close();
-      return stopwatch.elapsedMilliseconds;
-    } catch (_) {
-      stopwatch.stop();
-      return null;
+  Future<Either<Failure, AvailableServers>> probePrivateServers() async {
+    _latencies = {};
+    final service = ref.read(lanternServiceProvider);
+    final local = sl<LocalStorageService>().getPrivateServers();
+    final registrations = await Future.wait(
+      local.map((item) async {
+        return service.addServerManually(
+          ip: (item['ip'] ?? '').toString(),
+          port: (item['port'] ?? '443').toString(),
+          accessToken:
+              (item['access_token'] ??
+                      item['accessToken'] ??
+                      item['token'] ??
+                      '')
+                  .toString(),
+          serverName: item['tag'].toString(),
+        );
+      }),
+    );
+    final registeredTags = <String>{};
+    for (var i = 0; i < registrations.length; i++) {
+      if (registrations[i].isRight()) {
+        registeredTags.add(local[i]['tag'].toString());
+      }
     }
+    if (local.isEmpty) return right(AvailableServers([]));
+    if (registeredTags.isEmpty) {
+      return registrations.first.map((_) => AvailableServers([]));
+    }
+    final tested = await service.runURLTests();
+    if (tested.isLeft()) {
+      return tested.map((_) => AvailableServers([]));
+    }
+    _latencies = Map.of(
+      tested.getOrElse((_) => {}),
+    )..removeWhere((tag, delay) => !registeredTags.contains(tag) || delay <= 0);
+    final result = await fetchAvailableServers();
+    if (ref.mounted) {
+      result.fold(
+        (_) {},
+        (servers) => state = AsyncValue.data(_privateServersOnly(servers)),
+      );
+    }
+    return result;
   }
 
   /// Forces a fetch of the available servers and updates the state.

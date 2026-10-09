@@ -213,23 +213,8 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
       }
     }
 
-    // Smart routing is an active decision: always probe every configured
-    // self-hosted server before selecting the lowest current latency.
-    await ref
-        .read(availableServersProvider.notifier)
-        .forceFetchAvailableServers();
+    final result = await ref.read(vpnProvider.notifier).startVPN(force: true);
     if (!mounted) return;
-    final fastest = ref
-        .read(availableServersProvider)
-        .value
-        ?.fastestPrivateServer;
-    if (fastest == null) {
-      context.showSnackBar('private_servers_unreachable'.i18n);
-      return;
-    }
-    final result = await ref
-        .read(vpnProvider.notifier)
-        .connectToServer(ServerLocationType.privateServer, fastest.tag);
 
     result.fold(
       (failure) {
@@ -243,11 +228,7 @@ class _ServerSelectionState extends ConsumerState<ServerSelection> {
               appRouter.maybePop();
               final retryResult = await ref
                   .read(vpnProvider.notifier)
-                  .connectToServer(
-                    ServerLocationType.privateServer,
-                    fastest.tag,
-                    skipConflictCheck: true,
-                  );
+                  .startVPN(force: true, skipConflictCheck: true);
               if (!context.mounted) return;
               retryResult.fold((failure) {
                 context.showSnackBar(failure.localizedErrorMessage);

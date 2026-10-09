@@ -504,6 +504,34 @@ type URLTestCompleteEvent struct {
 	Results map[string]uint16 `json:"results"`
 }
 
+// TestServerLatencies returns fresh URL-test results.
+func (c *VPNClient) TestServerLatencies(ctx context.Context, basePath string, outbounds []option.Outbound) (map[string]uint16, error) {
+	ctx, cancel := context.WithTimeout(ctx, offlineURLTestTimeout)
+	defer cancel()
+	c.mu.RLock()
+	if c.tunnel == nil {
+		c.mu.RUnlock()
+		return c.RunOfflineURLTests(ctx, basePath, outbounds, nil)
+	}
+	defer c.mu.RUnlock()
+	outbound, found := c.tunnel.outboundMgr.Outbound(AutoSelectTag)
+	if !found {
+		return nil, errors.New("auto select group not found")
+	}
+	tester, ok := outbound.(adapter.URLTestGroup)
+	if !ok {
+		return nil, errors.New("auto select group does not support URL tests")
+	}
+	results, err := tester.URLTest(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return results, nil
+}
+
 func (c *VPNClient) CurrentAutoSelectedServer() (string, error) {
 	if !c.isOpen() {
 		c.logger.Log(nil, log.LevelTrace, "Tunnel not running, cannot get auto selections")

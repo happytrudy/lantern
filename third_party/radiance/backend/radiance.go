@@ -1515,6 +1515,12 @@ func (r *LocalBackend) ClearTunnelCache() error {
 	return err
 }
 
+// TestServerLatencies returns only nodes that succeeded in this URL-test run.
+func (r *LocalBackend) TestServerLatencies(ctx context.Context) (map[string]uint16, error) {
+	return r.vpnClient.TestServerLatencies(ctx, settings.GetString(settings.DataPathKey),
+		servers.ServerList{Servers: r.srvManager.AllServers()}.Outbounds())
+}
+
 func (r *LocalBackend) RunOfflineURLTests() error {
 	svrs := r.srvManager.AllServers()
 	slog.Debug("Running offline server latency tests", "server_count", len(svrs))
