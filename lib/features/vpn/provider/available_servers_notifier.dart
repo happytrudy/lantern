@@ -145,8 +145,6 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
     final service = ref.read(lanternServiceProvider);
     final local = sl<LocalStorageService>().getPrivateServers();
     if (local.isEmpty) return right(AvailableServers([]));
-    final localTags = local.map((item) => item['tag'].toString()).toSet();
-
     // Native already owns the complete server configuration. Flutter storage
     // may contain only a tag for servers imported from a subscription or share
     // link, so re-registering from local metadata incorrectly makes those
@@ -157,18 +155,44 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
     }
     _latencies = Map.of(
       tested.getOrElse((_) => {}),
-    )..removeWhere((tag, delay) => !localTags.contains(tag) || delay <= 0);
+    )..removeWhere((_, delay) => delay <= 0);
     appLogger.info(
       'Smart Routing URL tests returned ${_latencies.length} result(s): $_latencies',
     );
     final result = await fetchAvailableServers();
+    final merged = result.map(
+      (servers) {
+        final knownTags = servers.servers.map((server) => server.tag).toSet();
+        final measuredOnly = _latencies.keys
+            .where((tag) => !knownTags.contains(tag))
+            .map(
+              (tag) => Server(
+                tag: tag,
+                type: '',
+                isLantern: false,
+                location: GeoLocation(
+                  country: '',
+                  countryCode: '',
+                  city: tag,
+                  latitude: 0,
+                  longitude: 0,
+                ),
+                selectionHistory: SelectionHistory(
+                  lastSuccessDelayMs: _latencies[tag]!,
+                  consecutiveFailures: 0,
+                ),
+              ),
+            );
+        return AvailableServers([...servers.servers, ...measuredOnly]);
+      },
+    );
     if (ref.mounted) {
-      result.fold(
+      merged.fold(
         (_) {},
         (servers) => state = AsyncValue.data(_privateServersOnly(servers)),
       );
     }
-    return result;
+    return merged;
   }
 
   /// Forces a fetch of the available servers and updates the state.
