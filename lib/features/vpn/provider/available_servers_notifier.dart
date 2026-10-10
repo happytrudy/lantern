@@ -144,50 +144,22 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
     _latencies = {};
     final service = ref.read(lanternServiceProvider);
     final local = sl<LocalStorageService>().getPrivateServers();
-    final registrations = await Future.wait(
-      local.map((item) async {
-        return service.addServerManually(
-          ip: (item['ip'] ?? '').toString(),
-          port: (item['port'] ?? '443').toString(),
-          accessToken:
-              (item['access_token'] ??
-                      item['accessToken'] ??
-                      item['token'] ??
-                      '')
-                  .toString(),
-          serverName: item['tag'].toString(),
-        );
-      }),
-    );
-    final registeredTags = <String>{};
-    for (var i = 0; i < registrations.length; i++) {
-      if (registrations[i].isRight()) {
-        registeredTags.add(local[i]['tag'].toString());
-      } else {
-        registrations[i].fold(
-          (failure) => appLogger.warning(
-            'Smart Routing could not register ${local[i]['tag']}: ${failure.error}',
-          ),
-          (_) {},
-        );
-      }
-    }
     if (local.isEmpty) return right(AvailableServers([]));
-    if (registeredTags.isEmpty) {
-      return registrations.first.map((_) => AvailableServers([]));
-    }
+    final localTags = local.map((item) => item['tag'].toString()).toSet();
+
+    // Native already owns the complete server configuration. Flutter storage
+    // may contain only a tag for servers imported from a subscription or share
+    // link, so re-registering from local metadata incorrectly makes those
+    // usable nodes look unavailable.
     final tested = await service.runURLTests();
     if (tested.isLeft()) {
       return tested.map((_) => AvailableServers([]));
     }
     _latencies = Map.of(
       tested.getOrElse((_) => {}),
-    );
+    )..removeWhere((tag, delay) => !localTags.contains(tag) || delay <= 0);
     appLogger.info(
       'Smart Routing URL tests returned ${_latencies.length} result(s): $_latencies',
-    );
-    _latencies.removeWhere(
-      (tag, delay) => !registeredTags.contains(tag) || delay <= 0,
     );
     final result = await fetchAvailableServers();
     if (ref.mounted) {
