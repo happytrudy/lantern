@@ -533,6 +533,10 @@ func startVPN() *C.char {
 		if err := c.ConnectVPN(""); err != nil {
 			return C.CString(fmt.Sprintf("start service failed: %v", err))
 		}
+		if err := lanterncore.SetSystemProxyEnabled(true); err != nil {
+			_ = c.DisconnectVPN()
+			return C.CString(fmt.Sprintf("set system proxy failed: %v", err))
+		}
 
 		return C.CString("ok")
 	})
@@ -548,6 +552,9 @@ func stopVPN() *C.char {
 
 		if err := c.DisconnectVPN(); err != nil {
 			return C.CString(fmt.Sprintf("stop service failed: %v", err))
+		}
+		if err := lanterncore.SetSystemProxyEnabled(false); err != nil {
+			return C.CString(fmt.Sprintf("restore system proxy failed: %v", err))
 		}
 
 		return C.CString("ok")
@@ -572,6 +579,10 @@ func connectToServer(_tag *C.char) *C.char {
 		// based on VPNStatus — no dispatch needed here.
 		if err := c.ConnectVPN(tag); err != nil {
 			return SendError(fmt.Errorf("start service failed: %w", err))
+		}
+		if err := lanterncore.SetSystemProxyEnabled(true); err != nil {
+			_ = c.DisconnectVPN()
+			return SendError(fmt.Errorf("set system proxy failed: %w", err))
 		}
 		return C.CString("ok")
 	})

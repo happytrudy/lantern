@@ -177,7 +177,8 @@ jobs:
         shell: pwsh
         env:
           APP_VERSION: ${{ inputs.version }}
-        run: make windows-release APP_VERSION=$env:APP_VERSION BUILD_TYPE=production INSTALLER_NAME=lantern-installer
+          WINDOWS_NO_TUN: "1"
+        run: make windows-release APP_VERSION=$env:APP_VERSION BUILD_TYPE=production INSTALLER_NAME=lantern-installer WINDOWS_NO_TUN=1
 
       - name: Test Windows connection error translations
         run: flutter test --no-pub test/core/extensions/windows_service_error_test.dart

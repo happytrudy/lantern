@@ -163,6 +163,13 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
     for (var i = 0; i < registrations.length; i++) {
       if (registrations[i].isRight()) {
         registeredTags.add(local[i]['tag'].toString());
+      } else {
+        registrations[i].fold(
+          (failure) => appLogger.warning(
+            'Smart Routing could not register ${local[i]['tag']}: ${failure.error}',
+          ),
+          (_) {},
+        );
       }
     }
     if (local.isEmpty) return right(AvailableServers([]));
@@ -175,7 +182,13 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
     }
     _latencies = Map.of(
       tested.getOrElse((_) => {}),
-    )..removeWhere((tag, delay) => !registeredTags.contains(tag) || delay <= 0);
+    );
+    appLogger.info(
+      'Smart Routing URL tests returned ${_latencies.length} result(s): $_latencies',
+    );
+    _latencies.removeWhere(
+      (tag, delay) => !registeredTags.contains(tag) || delay <= 0,
+    );
     final result = await fetchAvailableServers();
     if (ref.mounted) {
       result.fold(

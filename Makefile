@@ -231,6 +231,13 @@ IOS_DEBUG_BUILD := $(BUILD_DIR)/ios/iphoneos/Runner.app
 
 TAGS=with_gvisor,with_quic,with_wireguard,with_utls,with_grpc
 
+# Set WINDOWS_NO_TUN=1 for a Windows build that exposes the local mixed
+# HTTP/SOCKS proxy instead of creating a TUN device. The Flutter FFI layer
+# enables that listener as the current user's Windows system proxy.
+WINDOWS_NO_TUN ?= 0
+comma := ,
+WINDOWS_NO_TUN_GO_TAGS := $(if $(filter 1 true yes,$(WINDOWS_NO_TUN)),$(comma)novpn,)
+
 WINDOWS_CGO_LDFLAGS=-static-libgcc -static-libstdc++ -static -lwinpthread
 
 ifeq ($(OS),Windows_NT)
@@ -474,7 +481,7 @@ endif
 .PHONY: desktop-lib
 desktop-lib: $(MAYBE_STEALTH_PROFILE)
 	$(SETENV) go build -v -trimpath -buildmode=c-shared \
-		-tags="$(TAGS)$(STEALTH_GO_TAGS)" \
+		-tags="$(TAGS)$(STEALTH_GO_TAGS)$(if $(filter windows,$(GOOS)),$(WINDOWS_NO_TUN_GO_TAGS),)" \
 		-ldflags="-w -s $(GO_EXTRA_LDFLAGS)" \
 		-o $(LIB_NAME) ./$(FFI_DIR)
 	@echo "Built desktop library: $(LIB_NAME)"
@@ -753,7 +760,7 @@ lanternd-windows-arm64: $(LANTERND_WINDOWS_ARM64)
 $(LANTERND_WINDOWS_AMD64): $(MAYBE_STEALTH_PROFILE)
 	$(call MKDIR_P,$(dir $(LANTERND_WINDOWS_AMD64)))
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
-		go build -mod=mod -v -trimpath -tags "$(TAGS)$(STEALTH_GO_TAGS)" \
+		go build -mod=mod -v -trimpath -tags "$(TAGS)$(STEALTH_GO_TAGS)$(WINDOWS_NO_TUN_GO_TAGS)" \
 		-ldflags "$(LANTERND_EXTRA_LDFLAGS)" \
 		-o $(LANTERND_WINDOWS_AMD64) $(LANTERND_SRC)
 	@echo "Built lanternd (windows-amd64): $(LANTERND_WINDOWS_AMD64)"
@@ -761,7 +768,7 @@ $(LANTERND_WINDOWS_AMD64): $(MAYBE_STEALTH_PROFILE)
 $(LANTERND_WINDOWS_ARM64): $(MAYBE_STEALTH_PROFILE)
 	$(call MKDIR_P,$(dir $(LANTERND_WINDOWS_ARM64)))
 	GOOS=windows GOARCH=arm64 CGO_ENABLED=0 \
-		go build -mod=mod -v -trimpath -tags "$(TAGS)$(STEALTH_GO_TAGS)" \
+		go build -mod=mod -v -trimpath -tags "$(TAGS)$(STEALTH_GO_TAGS)$(WINDOWS_NO_TUN_GO_TAGS)" \
 		-ldflags "$(LANTERND_EXTRA_LDFLAGS)" \
 		-o $(LANTERND_WINDOWS_ARM64) $(LANTERND_SRC)
 	@echo "Built lanternd (windows-arm64): $(LANTERND_WINDOWS_ARM64)"

@@ -37,6 +37,10 @@ const (
 
 	urlTestInterval    = 3 * time.Minute
 	urlTestIdleTimeout = 15 * time.Minute
+	// Google endpoints are blocked or unreliable on some client networks even
+	// when the proxy itself is healthy. Cloudflare's 204 endpoint is small,
+	// globally reachable, and only measures proxy response latency.
+	urlTestURL = "https://cp.cloudflare.com/generate_204"
 
 	cacheID              = "lantern"
 	cacheFileName        = "lantern.cache"
@@ -570,7 +574,7 @@ func urlTestOutbound(tag string, outbounds []string, urlOverrides map[string]str
 		Tag:  tag,
 		Options: &lbO.MutableAutoSelectOutboundOptions{
 			Outbounds:                 outbounds,
-			URL:                       "https://google.com/generate_204",
+			URL:                       urlTestURL,
 			URLOverrides:              urlOverrides,
 			BackgroundIntervalSeconds: uint32(urlTestInterval / time.Second),
 		},

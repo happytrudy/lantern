@@ -1007,6 +1007,7 @@ class MethodHandler : FlutterPlugin,
                         val accessToken =
                             map["accessToken"] as String? ?: error("Missing accessToken")
                         val serverName = map["serverName"] as String? ?: error("Missing serverName")
+                        LanternVpnService.awaitRadianceReady()
                         Mobile.addServerManagerInstance(
                             ip,
                             port,
@@ -1438,6 +1439,7 @@ class MethodHandler : FlutterPlugin,
 
             Methods.RunURLTests.method -> {
                 scope.handleValue(result, "run_url_tests") {
+                    LanternVpnService.awaitRadianceReady()
                     Mobile.runURLTests()
                 }
             }

@@ -23,6 +23,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import lantern.io.libbox.Notification
 import lantern.io.libbox.StringIterator
 import lantern.io.libbox.TunOptions
@@ -67,6 +68,7 @@ class LanternVpnService :
 
         // Limit how long the UI waits for a blocking native start.
         private const val VPN_START_TIMEOUT_MS = 60_000L
+        private const val RADIANCE_READY_TIMEOUT_MS = 20_000L
 
         private val vpnStartGate = VpnStartGate()
 
@@ -81,12 +83,14 @@ class LanternVpnService :
 
         suspend fun awaitRadianceReady() {
             if (Mobile.isRadianceConnected()) return
-            when (val state = radianceState.first { it !is RadianceState.Initializing }) {
-                RadianceState.Ready -> check(Mobile.isRadianceConnected()) {
-                    "Radiance setup completed but the core is unavailable"
+            withTimeout(RADIANCE_READY_TIMEOUT_MS) {
+                when (val state = radianceState.first { it !is RadianceState.Initializing }) {
+                    RadianceState.Ready -> check(Mobile.isRadianceConnected()) {
+                        "Radiance setup completed but the core is unavailable"
+                    }
+                    is RadianceState.Failed -> throw state.cause
+                    RadianceState.Initializing -> error("Radiance is still initializing")
                 }
-                is RadianceState.Failed -> throw state.cause
-                RadianceState.Initializing -> error("Radiance is still initializing")
             }
         }
 
