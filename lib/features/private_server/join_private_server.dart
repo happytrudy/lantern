@@ -21,6 +21,7 @@ class JoinPrivateServer extends StatefulHookConsumerWidget {
 }
 
 class _JoinPrivateServerState extends ConsumerState<JoinPrivateServer> {
+  bool _joining = false;
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -30,21 +31,6 @@ class _JoinPrivateServerState extends ConsumerState<JoinPrivateServer> {
     final nameController = useTextEditingController(text: name);
     final buttonValid = useState(
         accessKeyController.text.isNotEmpty && nameController.text.isNotEmpty);
-    final serverState = ref.watch(privateServerProvider);
-
-    useEffect(() {
-      if (serverState.status == 'EventTypeProvisioningCompleted') {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          appLogger.info("Private server deployment completed successfully.",
-              serverState.data);
-
-          ref.read(availableServersProvider.notifier).fetchAvailableServers();
-          showSuccessDialog(nameController.text);
-        });
-      }
-
-      return null;
-    }, [serverState.status]);
     return BaseScreen(
       key: const Key('join_private_server.screen'),
       title: 'join_private_server'.i18n,
@@ -161,7 +147,7 @@ class _JoinPrivateServerState extends ConsumerState<JoinPrivateServer> {
                 SizedBox(height: 16),
                 PrimaryButton(
                   buttonKey: const Key('join_private_server.submit'),
-                  enabled: buttonValid.value,
+                  enabled: buttonValid.value && !_joining,
                   label: 'join_server'.i18n,
                   onPressed: () => onJoinServer(
                       accessKeyController.text, nameController.text),
@@ -220,26 +206,46 @@ class _JoinPrivateServerState extends ConsumerState<JoinPrivateServer> {
         ]);
   }
 
-  Future<void> onJoinServer(String urls, String serverName) async {
+  Future<void> onJoinServer(String accessKey, String serverName) async {
+    if (_joining) return;
+    setState(() => _joining = true);
     context.showLoadingDialog();
-    final result = await ref
-        .read(privateServerProvider.notifier)
-        .addServerBasedOnURLs(urls, true);
-    result.fold(
-      (error) {
-        appLogger.error("Failed to join private server: $error");
-        context.hideLoadingDialog();
-        AppDialog.errorDialog(
+    try {
+      final result = await ref
+          .read(privateServerProvider.notifier)
+          .joinServer(accessKey, serverName);
+      if (!mounted) return;
+      context.hideLoadingDialog();
+      result.fold(
+        (error) {
+          appLogger.error("Failed to join private server: $error");
+          AppDialog.errorDialog(
             context: context,
             title: 'error'.i18n,
-            content: error.localizedErrorMessage);
-      },
-      (success) {
-        unawaited(ref.read(availableServersProvider.notifier).forceFetchAvailableServers());
-        context.hideLoadingDialog();
-        appLogger.info("Successfully started joining private server.");
-      },
-    );
+            content: error.localizedErrorMessage,
+          );
+        },
+        (_) {
+          unawaited(
+            ref
+                .read(availableServersProvider.notifier)
+                .forceFetchAvailableServers(),
+          );
+          showSuccessDialog(serverName.trim());
+        },
+      );
+    } catch (error, stackTrace) {
+      appLogger.error('Failed to join private server', error, stackTrace);
+      if (!mounted) return;
+      context.hideLoadingDialog();
+      AppDialog.errorDialog(
+        context: context,
+        title: 'error'.i18n,
+        content: 'error'.i18n,
+      );
+    } finally {
+      if (mounted) setState(() => _joining = false);
+    }
   }
 
   void showSuccessDialog(String name) {

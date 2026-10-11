@@ -19,6 +19,7 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
   Map<String, int> _latencies = {};
   DateTime? _lastSettleReloadAt;
   Future<void>? _settleReload;
+  Future<Either<Failure, AvailableServers>>? _probeRequest;
 
   @override
   Future<AvailableServers> build() async {
@@ -140,7 +141,13 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
     return null;
   }
 
-  Future<Either<Failure, AvailableServers>> probePrivateServers() async {
+  Future<Either<Failure, AvailableServers>> probePrivateServers() {
+    return _probeRequest ??= _probePrivateServers().whenComplete(() {
+      _probeRequest = null;
+    });
+  }
+
+  Future<Either<Failure, AvailableServers>> _probePrivateServers() async {
     _latencies = {};
     final service = ref.read(lanternServiceProvider);
     final local = sl<LocalStorageService>().getPrivateServers();

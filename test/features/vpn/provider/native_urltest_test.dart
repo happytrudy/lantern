@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -21,6 +23,7 @@ class _Service implements LanternService {
   final registered = <String>[];
   final failedRegistrations = <String>{};
   int testCalls = 0;
+  Completer<Either<Failure, Map<String, int>>>? probeCompleter;
 
   @override
   Future<Either<Failure, Unit>> addServerManually({
@@ -43,7 +46,7 @@ class _Service implements LanternService {
   @override
   Future<Either<Failure, Map<String, int>>> runURLTests() async {
     testCalls++;
-    return right(delays);
+    return probeCompleter?.future ?? right(delays);
   }
 
   @override
@@ -168,6 +171,40 @@ void main() {
         'shared',
       );
       expect(service.registered, isEmpty);
+    },
+  );
+  test(
+    'overlapping probe callers share a single fresh native result',
+    () async {
+      await save('new');
+      await container.read(availableServersProvider.future);
+      service.probeCompleter = Completer<Either<Failure, Map<String, int>>>();
+      final notifier = container.read(availableServersProvider.notifier);
+      final first = notifier.probePrivateServers();
+      final second = notifier.probePrivateServers();
+      await Future<void>.delayed(Duration.zero);
+      expect(service.testCalls, 1);
+      expect(service.registered, ['new']);
+      service.probeCompleter!.complete(right({'new': 37}));
+      for (final result in await Future.wait([first, second])) {
+        expect(
+          result
+              .getOrElse((_) => throw StateError('probe failed'))
+              .fastestPrivateServer
+              ?.tag,
+          'new',
+        );
+      }
+      service.probeCompleter = null;
+      service.delays = {};
+      final fresh = await notifier.probePrivateServers();
+      expect(service.testCalls, 2);
+      expect(
+        fresh
+            .getOrElse((_) => throw StateError('probe failed'))
+            .fastestPrivateServer,
+        isNull,
+      );
     },
   );
 }

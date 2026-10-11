@@ -17,6 +17,7 @@ import 'package:lantern/core/router/router.dart';
 import 'package:lantern/core/services/logger_service.dart';
 import 'package:lantern/core/utils/country_code.dart';
 import 'package:lantern/core/utils/platform_utils.dart';
+import 'package:lantern/core/utils/private_server_access_key.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../features/home/provider/home_notifier.dart';
@@ -243,25 +244,19 @@ void hideKeyboard() {
 
 void sharePrivateAccessKey(
   PrivateServer server,
+  String accessKey,
   Map<String, dynamic> tokenPayload,
 ) {
-  final expirationDate = tokenPayload['exp'].toString();
-  final aliasName = tokenPayload['sub'];
-  final uri = Uri(
-    scheme: 'https',
-    host: Uri.parse(
-      AppUrls.lanternOfficial,
-    ).host, // ensures host is parsed correctly
-    path: '/private-server',
-    queryParameters: {
-      'ip': server.externalIp,
-      'port': server.port.toString(),
-      'token': server.accessToken,
-      'name': server.serverName,
-      'exp': expirationDate,
-      'alias': aliasName,
-    },
-  );
+  final uri =
+      PrivateServerAccessKey(
+        host: server.externalIp,
+        port: server.port,
+        token: accessKey,
+        alias: tokenPayload['sub'].toString(),
+      ).toUri(
+        Uri.parse(AppUrls.lanternOfficial).host,
+        expiresAt: (tokenPayload['exp'] as num).toInt(),
+      );
   final urlString = '${'join_my_private_server'.i18n} $uri';
   SharePlus.instance.share(ShareParams(text: urlString));
 }

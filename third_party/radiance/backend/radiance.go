@@ -871,7 +871,17 @@ func (r *LocalBackend) AddServersByURL(urls []string, skipCertVerification bool)
 }
 
 func (r *LocalBackend) AddPrivateServer(tag, ip string, port int, accessToken string, loc C.ServerLocation, joined bool) error {
-	return r.srvManager.AddPrivateServer(tag, ip, port, accessToken, loc, joined)
+	if err := r.srvManager.AddPrivateServer(tag, ip, port, accessToken, loc, joined); err != nil {
+		return err
+	}
+	srv, found := r.srvManager.GetServerByTag(tag)
+	if !found {
+		return fmt.Errorf("private server %q was not registered", tag)
+	}
+	if err := r.vpnClient.AddOutbounds(servers.ServerList{Servers: []*servers.Server{srv}}); err != nil && !errors.Is(err, vpn.ErrTunnelNotConnected) {
+		return fmt.Errorf("failed to add private outbound to VPN client: %w", err)
+	}
+	return nil
 }
 
 func (r *LocalBackend) InviteToPrivateServer(ip string, port int, accessToken string, inviteName string) (string, error) {
@@ -1519,6 +1529,9 @@ func (r *LocalBackend) ClearTunnelCache() error {
 func (r *LocalBackend) TestServerLatencies(ctx context.Context) (map[string]uint16, error) {
 	list := servers.ServerList{Servers: r.srvManager.AllServers()}
 	list.Servers = slices.DeleteFunc(list.Servers, func(s *servers.Server) bool { return s.IsLantern })
+	if err := r.vpnClient.AddOutbounds(list); err != nil && !errors.Is(err, vpn.ErrTunnelNotConnected) {
+		return nil, fmt.Errorf("failed to synchronize private outbounds before testing: %w", err)
+	}
 	return r.vpnClient.TestServerLatencies(ctx, settings.GetString(settings.DataPathKey), list.Outbounds(), list.Endpoints()...)
 }
 

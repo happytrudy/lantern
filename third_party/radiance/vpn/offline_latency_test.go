@@ -183,3 +183,80 @@ func TestOfflineLatencyColdStart(t *testing.T) {
 		})
 	}
 }
+
+func TestOfflineLatencyWaitsForFreshServerSnapshot(t *testing.T) {
+	ctx := box.Context(t.Context())
+	registry := service.FromContext[A.OutboundRegistry](ctx).(*outbound.Registry)
+	firstOutbound := &offlineProbeOutbound{Adapter: outbound.NewAdapter("socks", "existing", []string{"tcp"}, nil), delay: 100 * time.Millisecond}
+	newOutbound := &offlineProbeOutbound{Adapter: outbound.NewAdapter("socks", "new", []string{"tcp"}, nil)}
+	outbound.Register[option.StubOptions](registry, "test-probe", func(_ context.Context, _ A.Router, _ log.ContextLogger, tag string, _ option.StubOptions) (A.Outbound, error) {
+		if tag == "new" {
+			return newOutbound, nil
+		}
+		return firstOutbound, nil
+	})
+	c := NewVPNClient(t.TempDir(), nil, &probePlatform{})
+	type probeResult struct {
+		results map[string]uint16
+		err     error
+	}
+	first := make(chan probeResult, 1)
+	go func() {
+		results, err := c.RunOfflineURLTests(ctx, t.TempDir(), []option.Outbound{{Type: "test-probe", Tag: "existing", Options: &option.StubOptions{}}}, map[string]string{"existing": "http://probe.invalid/generate_204"})
+		first <- probeResult{results, err}
+	}()
+	require.Eventually(t, func() bool { return firstOutbound.requests.Load() > 0 }, time.Second, time.Millisecond)
+	results, err := c.RunOfflineURLTests(ctx, t.TempDir(), []option.Outbound{{Type: "test-probe", Tag: "new", Options: &option.StubOptions{}}}, map[string]string{"new": "http://probe.invalid/generate_204"})
+	require.NoError(t, err)
+	require.Contains(t, results, "new")
+	require.NotContains(t, results, "existing")
+	previous := <-first
+	require.NoError(t, previous.err)
+	require.Contains(t, previous.results, "existing")
+	require.EqualValues(t, 1, newOutbound.requests.Load())
+}
+
+func TestOfflineLatencyWaitingCanBeCanceled(t *testing.T) {
+	c := NewVPNClient(t.TempDir(), nil, nil)
+	c.offlineTestDone = make(chan struct{})
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+	_, err := c.RunOfflineURLTests(ctx, "", nil, nil)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	select {
+	case <-c.offlineTestDone:
+		t.Fatal("a waiting probe closed the active probe's completion channel")
+	default:
+	}
+}
+
+func TestOfflineLatencyConnectWaitsForQueuedProbe(t *testing.T) {
+	c := NewVPNClient(t.TempDir(), nil, nil)
+	c.tunnel = &tunnel{}
+	c.status.Store(Connected)
+	firstDone := make(chan struct{})
+	cancelRequested := make(chan struct{}, 1)
+	c.offlineTestDone = firstDone
+	c.offlineTestCancel = func() { cancelRequested <- struct{}{} }
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	connected := make(chan error, 1)
+	go func() { connected <- c.Connect(ctx, BoxOptions{}) }()
+	select {
+	case <-cancelRequested:
+	case <-ctx.Done():
+		t.Fatal("Connect did not cancel the active probe")
+	}
+	queuedDone := make(chan struct{})
+	c.mu.Lock()
+	c.offlineTestDone = queuedDone
+	c.offlineTestCancel = func() { close(queuedDone) }
+	c.mu.Unlock()
+	close(firstDone)
+	require.ErrorIs(t, <-connected, ErrTunnelAlreadyConnected)
+	select {
+	case <-queuedDone:
+	default:
+		t.Fatal("Connect started before the queued probe finished")
+	}
+}

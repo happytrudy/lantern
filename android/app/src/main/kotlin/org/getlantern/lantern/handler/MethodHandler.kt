@@ -1094,6 +1094,7 @@ class MethodHandler : FlutterPlugin,
                         val skipValidation =
                             map["skipValidation"] as Boolean? ?: error("Missing skipValidation")
 
+                        LanternVpnService.awaitRadianceReady()
                         val tags = Mobile.addServerBasedOnURLs(
                             urls,
                             skipValidation,

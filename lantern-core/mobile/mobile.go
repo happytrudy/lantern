@@ -774,11 +774,7 @@ func AddServerBasedOnURLs(urls string, skipCertVerification bool) (string, error
 		if err != nil {
 			return "", err
 		}
-		b, err := json.Marshal(tags)
-		if err != nil {
-			return "", fmt.Errorf("marshal tags: %w", err)
-		}
-		return string(b), nil
+		return string(tags), nil
 	})
 }
 

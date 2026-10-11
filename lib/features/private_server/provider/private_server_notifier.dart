@@ -5,6 +5,8 @@ import 'package:fpdart/fpdart.dart';
 import 'package:lantern/core/common/app_eum.dart';
 import 'package:lantern/core/models/private_server_status.dart';
 import 'package:lantern/core/utils/failure.dart';
+import 'package:lantern/core/utils/private_server_access_key.dart';
+import 'package:lantern/core/localization/i18n.dart';
 import 'package:lantern/core/services/injection_container.dart' show sl;
 import 'package:lantern/core/services/local_storage_service.dart';
 import 'package:lantern/lantern/lantern_service_notifier.dart';
@@ -106,6 +108,57 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
     return result;
   }
 
+  Future<Either<Failure, Unit>> joinServer(
+    String accessKey,
+    String serverName,
+  ) async {
+    final name = serverName.trim();
+    if (name.isEmpty) {
+      return left(
+        Failure(
+          error: 'server_alias_cannot_be_empty',
+          localizedErrorMessage: 'server_alias_cannot_be_empty'.i18n,
+        ),
+      );
+    }
+    final PrivateServerAccessKey? invitation;
+    try {
+      invitation = PrivateServerAccessKey.parse(accessKey);
+    } on FormatException catch (error) {
+      return left(
+        Failure(
+          error: error.message,
+          localizedErrorMessage: error.message.i18n,
+        ),
+      );
+    }
+    if (invitation == null) {
+      return (await addServerBasedOnURLs(
+        accessKey.trim(),
+        true,
+      )).map((_) => unit);
+    }
+    final result = await ref
+        .read(lanternServiceProvider)
+        .addServerManually(
+          ip: invitation.host,
+          port: invitation.port,
+          accessToken: invitation.token,
+          serverName: name,
+        );
+    if (result.isRight()) {
+      await sl<LocalStorageService>().savePrivateServer(
+        tag: name,
+        name: name,
+        ip: invitation.host,
+        port: invitation.port,
+        accessToken: invitation.token,
+        isJoined: true,
+      );
+    }
+    return result;
+  }
+
   void watchPrivateServerLogs() {
     _privateServerStatusSub = ref
         .read(lanternServiceProvider)
@@ -167,7 +220,6 @@ class PrivateServerNotifier extends _$PrivateServerNotifier {
                   ip: (payload['external_ip'] ?? '').toString(),
                   port: (payload['port'] ?? '').toString(),
                   accessToken: (payload['access_token'] ?? '').toString(),
-                  isJoined: false,
                   protocol: (payload['protocol'] ?? '').toString(),
                 );
               }

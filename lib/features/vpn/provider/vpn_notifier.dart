@@ -23,6 +23,7 @@ part 'vpn_notifier.g.dart';
 class VpnNotifier extends _$VpnNotifier {
   bool _hasStatusStreamEmission = false;
   Future<Either<Failure, String>>? _stopRequest;
+  Future<Either<Failure, String>>? _connectionRequest;
   bool _userDisconnectRequested = false;
 
   RatingPromptService? get _ratingPrompt =>
@@ -127,7 +128,9 @@ class VpnNotifier extends _$VpnNotifier {
         }
       }
 
-      state = nextStatus;
+      state = _connectionRequest != null && nextStatus == VPNStatus.disconnected
+          ? VPNStatus.connecting
+          : nextStatus;
     });
     return VPNStatus.disconnected;
   }
@@ -172,7 +175,8 @@ class VpnNotifier extends _$VpnNotifier {
   }
 
   Future<Either<Failure, String>> onVPNStateChange() async {
-    if (_stopRequest != null ||
+    if (_connectionRequest != null ||
+        _stopRequest != null ||
         _userDisconnectRequested ||
         state == VPNStatus.connecting ||
         state == VPNStatus.disconnecting) {
@@ -194,7 +198,40 @@ class VpnNotifier extends _$VpnNotifier {
   Future<Either<Failure, String>> startVPN({
     bool force = false,
     bool skipConflictCheck = false,
+  }) => _requestConnection(
+    () => _startVPN(force: force, skipConflictCheck: skipConflictCheck),
+  );
+
+  Future<Either<Failure, String>> _requestConnection(
+    Future<Either<Failure, String>> Function() request,
+  ) {
+    final pending = _connectionRequest;
+    if (pending != null) return pending;
+    if (state == VPNStatus.connecting || state == VPNStatus.disconnecting) {
+      return Future.value(Right(''));
+    }
+    final completer = Completer<Either<Failure, String>>();
+    _connectionRequest = completer.future;
+    unawaited(() async {
+      try {
+        completer.complete(await request());
+      } catch (error, stackTrace) {
+        if (ref.mounted && state == VPNStatus.connecting) {
+          state = VPNStatus.disconnected;
+        }
+        completer.completeError(error, stackTrace);
+      } finally {
+        _connectionRequest = null;
+      }
+    }());
+    return completer.future;
+  }
+
+  Future<Either<Failure, String>> _startVPN({
+    required bool force,
+    required bool skipConflictCheck,
   }) async {
+    if (_stopRequest != null) await _stopRequest;
     if (!skipConflictCheck) {
       final conflict = await _checkVpnConflict();
       if (conflict != null) return conflict;
@@ -242,7 +279,7 @@ class VpnNotifier extends _$VpnNotifier {
         );
       }
 
-      final result = await connectToServer(
+      final result = await _connectToServer(
         ServerLocationType.privateServer,
         fastest.tag,
         restoreRegistration: false,
@@ -265,7 +302,7 @@ class VpnNotifier extends _$VpnNotifier {
         ),
       );
     }
-    return connectToServer(type, tag, skipConflictCheck: skipConflictCheck);
+    return _connectToServer(type, tag, skipConflictCheck: true);
   }
 
   /// Connects to a specific server location.
@@ -275,7 +312,22 @@ class VpnNotifier extends _$VpnNotifier {
     String tag, {
     bool skipConflictCheck = false,
     bool restoreRegistration = true,
+  }) => _requestConnection(
+    () => _connectToServer(
+      location,
+      tag,
+      skipConflictCheck: skipConflictCheck,
+      restoreRegistration: restoreRegistration,
+    ),
+  );
+
+  Future<Either<Failure, String>> _connectToServer(
+    ServerLocationType location,
+    String tag, {
+    bool skipConflictCheck = false,
+    bool restoreRegistration = true,
   }) async {
+    if (_stopRequest != null) await _stopRequest;
     // Check for a conflicting VPN before initiating a new connection.
     // The native side guards against false positives by returning false when
     // Lantern's own VPN is already active (e.g. server switching while connected).

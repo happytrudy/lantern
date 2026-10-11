@@ -117,22 +117,29 @@ func (c *VPNClient) Connect(ctx context.Context, boxOptions BoxOptions) error {
 	ctx, span := otel.Tracer(tracerName).Start(ctx, "connect")
 	defer span.End()
 
-	c.mu.Lock()
-	c.offlineTestCancel()
-	done := c.offlineTestDone
-	c.mu.Unlock()
-	select {
-	case <-done:
-	case <-ctx.Done():
-		return traces.RecordError(ctx, ctx.Err())
+	for {
+		c.mu.Lock()
+		c.offlineTestCancel()
+		done := c.offlineTestDone
+		select {
+		case <-done:
+			break
+		default:
+			c.mu.Unlock()
+			select {
+			case <-done:
+				continue
+			case <-ctx.Done():
+				return traces.RecordError(ctx, ctx.Err())
+			}
+		}
+		break
 	}
+	defer c.mu.Unlock()
 
 	// The bring-up below must outlive the request that triggered it, so detach
 	// from the caller's cancellation while keeping trace context (span values).
 	ctx = context.WithoutCancel(ctx)
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.tunnel != nil {
 		switch status := c.Status(); status {
 		case Connected:
@@ -507,14 +514,25 @@ type URLTestCompleteEvent struct {
 
 // TestServerLatencies returns fresh URL-test results.
 func (c *VPNClient) TestServerLatencies(ctx context.Context, basePath string, outbounds []option.Outbound, endpoints ...option.Endpoint) (map[string]uint16, error) {
-	ctx, cancel := context.WithTimeout(ctx, offlineURLTestTimeout)
-	defer cancel()
-	c.mu.RLock()
-	if c.tunnel == nil {
+	for {
+		c.mu.RLock()
+		if c.tunnel != nil {
+			break
+		}
 		c.mu.RUnlock()
-		return c.RunOfflineURLTests(ctx, basePath, outbounds, nil, endpoints...)
+		results, err := c.RunOfflineURLTests(ctx, basePath, outbounds, nil, endpoints...)
+		if !errors.Is(err, ErrTunnelAlreadyConnected) {
+			return results, err
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 	}
 	defer c.mu.RUnlock()
+	ctx, cancel := context.WithTimeout(ctx, offlineURLTestTimeout)
+	defer cancel()
+	c.tunnel.outboundMu.Lock()
+	defer c.tunnel.outboundMu.Unlock()
 	if c.tunnel.ctx != nil {
 		if registry := service.RegistryFromContext(c.tunnel.ctx); registry != nil {
 			ctx = service.ContextWithRegistry(ctx, registry)
@@ -638,24 +656,33 @@ func (c *VPNClient) AutoSelectedChangeListener(ctx context.Context) <-chan struc
 	return done
 }
 
-// RunOfflineURLTests will run URL tests for all outbounds if the tunnel is not currently connected.
-// This can improve initial connection times by pre-determining reachability and latency to servers.
-//
-// The tests are cancelled and any results discarded if ctx is cancelled or if [VPNClient.Connect]
-// is called while they are running. Callers should pass a context tied to the backend lifetime so
-// that closing the backend (e.g. when the tunnel comes up in the extension process) stops in-flight
-// probe dials rather than letting them route through the newly established tunnel.
+// RunOfflineURLTests tests fresh outbound latencies while the tunnel is disconnected.
+// Concurrent probes wait for the active probe and then test their own configuration.
+// Cancellation of ctx or a call to Connect cancels active tests and discards their results.
 func (c *VPNClient) RunOfflineURLTests(ctx context.Context, basePath string, outbounds []option.Outbound, banditURLs map[string]string, endpoints ...option.Endpoint) (map[string]uint16, error) {
-	c.mu.Lock()
-	if c.tunnel != nil {
-		c.mu.Unlock()
-		return nil, ErrTunnelAlreadyConnected
-	}
-	select {
-	case <-c.offlineTestDone:
-	default:
-		c.mu.Unlock()
-		return nil, errors.New("offline tests already running")
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		c.mu.Lock()
+		if c.tunnel != nil {
+			c.mu.Unlock()
+			return nil, ErrTunnelAlreadyConnected
+		}
+		done := c.offlineTestDone
+		select {
+		case <-done:
+			break
+		default:
+			c.mu.Unlock()
+			select {
+			case <-done:
+				continue
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		break
 	}
 
 	ctx, cancel := context.WithCancel(box.Context(service.ExtendContext(ctx)))

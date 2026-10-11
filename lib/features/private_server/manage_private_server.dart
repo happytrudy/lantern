@@ -202,10 +202,12 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
     );
     final cachedKey = _accessKeyCache[server.tag];
     if (cachedKey != null) {
-      appLogger.info('Reusing cached access key for tag: ${server.tag}');
       try {
+        if (JwtDecoder.isExpired(cachedKey)) {
+          throw const FormatException('Expired access key');
+        }
         final tokenData = JwtDecoder.decode(cachedKey);
-        sharePrivateAccessKey(privateServer, tokenData);
+        sharePrivateAccessKey(privateServer, cachedKey, tokenData);
         return;
       } catch (e) {
         appLogger.warning(
@@ -315,7 +317,7 @@ class _ManagePrivateServerState extends ConsumerState<ManagePrivateServer> {
             appLogger.info(
               'Access key generated and cached for: ${server.serverName}',
             );
-            sharePrivateAccessKey(server, tokenData);
+            sharePrivateAccessKey(server, accessKey, tokenData);
           } catch (error, stackTrace) {
             appLogger.error(
               'Generated access key is invalid',
