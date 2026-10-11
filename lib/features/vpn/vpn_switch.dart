@@ -22,68 +22,103 @@ class VPNSwitch extends HookConsumerWidget {
       }
     });
     final vpnStatus = ref.watch(vpnProvider);
-    final isVPNOn = (vpnStatus == VPNStatus.connected);
-    return CustomAnimatedToggleSwitch<bool>(
-      current: isVPNOn,
-      allowUnlistedValues: false,
-      values: [false, true],
-      spacing: 10.h,
-      onChanged: (value) {
-        appLogger.info('VPN Switch changed to: $value');
-        onVPNStateChange(ref, context);
-      },
-      loading: false,
-      height: PlatformUtils.isDesktop ? 70.h : 65.h,
-      indicatorSize: Size(60.r, 60.r),
-      iconBuilder: (context, local, global) {
-        return SizedBox();
-      },
-      foregroundIndicatorBuilder: (context, global) {
-        if (vpnStatus == VPNStatus.connecting ||
-            vpnStatus == VPNStatus.disconnecting) {
-          return Container(
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(30.r),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: CircularProgressIndicator(
-                strokeWidth: 8.r,
-                color: context.actionToggleKnobBg,
-              ),
-            ),
-          );
-        }
-        return GestureDetector(
-          key: const Key('vpn.toggle'),
-          onTap: () {
-            appLogger.info('VPN Switch tapped');
-            onVPNStateChange(ref, context);
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              color: context.actionToggleKnobBg,
-              borderRadius: BorderRadius.circular(30.r),
+    final isVPNOn = vpnStatus == VPNStatus.connected;
+    final isBusy =
+        vpnStatus == VPNStatus.connecting ||
+        vpnStatus == VPNStatus.disconnecting;
+    final progressLabel = vpnStatus == VPNStatus.connecting
+        ? 'Connecting…'.i18n
+        : 'Disconnecting…'.i18n;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Semantics(
+          enabled: !isBusy,
+          child: AbsorbPointer(
+            key: const Key('vpn.switch.interaction'),
+            absorbing: isBusy,
+            child: CustomAnimatedToggleSwitch<bool>(
+              active: !isBusy,
+              current: isVPNOn,
+              allowUnlistedValues: false,
+              values: [false, true],
+              spacing: 10.h,
+              onChanged: isBusy
+                  ? null
+                  : (value) {
+                      appLogger.info('VPN Switch changed to: $value');
+                      onVPNStateChange(ref, context);
+                    },
+              loading: false,
+              height: PlatformUtils.isDesktop ? 70.h : 65.h,
+              indicatorSize: Size(60.r, 60.r),
+              iconBuilder: (context, local, global) {
+                return SizedBox();
+              },
+              foregroundIndicatorBuilder: (context, global) {
+                if (isBusy) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(30.r),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 8.r,
+                        color: context.actionToggleKnobBg,
+                      ),
+                    ),
+                  );
+                }
+                return GestureDetector(
+                  key: const Key('vpn.toggle'),
+                  onTap: () {
+                    appLogger.info('VPN Switch tapped');
+                    onVPNStateChange(ref, context);
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: context.actionToggleKnobBg,
+                      borderRadius: BorderRadius.circular(30.r),
+                    ),
+                  ),
+                );
+              },
+              wrapperBuilder: (context, global, child) {
+                return Container(
+                  key: Key('vpn.switch.${vpnStatus.name}'),
+                  padding: EdgeInsets.all(5.r),
+                  decoration: BoxDecoration(
+                    color: _wrapperColor(vpnStatus, context),
+                    borderRadius: BorderRadius.circular(50.r),
+                  ),
+                  child: child,
+                );
+              },
             ),
           ),
-        );
-      },
-      wrapperBuilder: (context, global, child) {
-        return Container(
-          key: Key('vpn.switch.${vpnStatus.name}'),
-          padding: EdgeInsets.all(5.r),
-          decoration: BoxDecoration(
-            color: _wrapperColor(vpnStatus, context),
-            borderRadius: BorderRadius.circular(50.r),
+        ),
+        if (isBusy) ...[
+          const SizedBox(height: 12),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              progressLabel,
+              key: const Key('vpn.switch.progress'),
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           ),
-          child: child,
-        );
-      },
+        ],
+      ],
     );
   }
 
   Future<void> onVPNStateChange(WidgetRef ref, BuildContext context) async {
+    final status = ref.read(vpnProvider);
+    if (status == VPNStatus.connecting || status == VPNStatus.disconnecting) {
+      return;
+    }
     if (PlatformUtils.isMacOS) {
       final systemExtensionStatus = ref.read(macosExtensionProvider);
       if (!systemExtensionStatus.isReady) {

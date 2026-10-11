@@ -210,11 +210,17 @@ class VpnNotifier extends _$VpnNotifier {
     if (state == VPNStatus.connecting || state == VPNStatus.disconnecting) {
       return Future.value(Right(''));
     }
+    final previousStatus = state;
     final completer = Completer<Either<Failure, String>>();
     _connectionRequest = completer.future;
+    state = VPNStatus.connecting;
     unawaited(() async {
       try {
-        completer.complete(await request());
+        final result = await request();
+        if (result.isLeft() && ref.mounted && state == VPNStatus.connecting) {
+          state = previousStatus;
+        }
+        completer.complete(result);
       } catch (error, stackTrace) {
         if (ref.mounted && state == VPNStatus.connecting) {
           state = VPNStatus.disconnected;

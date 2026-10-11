@@ -2036,3 +2036,9 @@ msgstr "The Windows VPN service could not start. Reinstall the app and check the
 
 msgid "windows_service_not_ready"
 msgstr "The Windows VPN service is not responding. Wait a moment and try again, or reinstall the app."
+
+msgid "Connecting…"
+msgstr "Connecting…"
+
+msgid "Disconnecting…"
+msgstr "Disconnecting…"

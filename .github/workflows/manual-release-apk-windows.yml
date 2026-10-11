@@ -101,7 +101,7 @@ jobs:
         shell: bash
         run: |
           go test -tags with_gvisor,with_quic,with_wireguard,with_utls,with_grpc github.com/getlantern/radiance/vpn -run 'Test(OfflineLatency|OutboundLatencies|TestServerLatencies)' -count=1
-          flutter test --no-pub test/features/vpn/provider/native_urltest_test.dart test/features/vpn/provider/smart_routing_requests_test.dart test/core/utils/private_server_access_key_test.dart test/features/private_server/provider/join_server_test.dart
+          flutter test --no-pub test/features/vpn/vpn_switch_test.dart test/features/vpn/provider/native_urltest_test.dart test/features/vpn/provider/smart_routing_requests_test.dart test/core/utils/private_server_access_key_test.dart test/features/private_server/provider/join_server_test.dart
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

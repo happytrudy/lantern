@@ -101,6 +101,7 @@ void main() {
     () async {
       final notifier = container.read(vpnProvider.notifier);
       final first = notifier.startVPN();
+      expect(container.read(vpnProvider), VPNStatus.connecting);
       final second = notifier.startVPN(force: true);
       final manual = notifier.connectToServer(
         ServerLocationType.privateServer,

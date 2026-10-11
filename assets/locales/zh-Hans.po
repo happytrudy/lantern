@@ -2034,3 +2034,9 @@ msgstr "Windows VPN 服务启动失败，请重新安装，并查看本地日志
 
 msgid "windows_service_not_ready"
 msgstr "Windows VPN 后台服务未响应，请稍后重试或重新安装。"
+
+msgid "Connecting…"
+msgstr "正在连接…"
+
+msgid "Disconnecting…"
+msgstr "正在断开…"
