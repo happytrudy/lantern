@@ -44,6 +44,10 @@ func TestPrivateServerIntegration(t *testing.T) {
 		require.NoError(t, manager.AddPrivateServer("s1", parsedURL.Hostname(), port, "rootToken", C.ServerLocation{}, false))
 		_, exists := manager.servers["s1"]
 		require.True(t, exists, "server should be added to the manager")
+
+		// Smart Routing restores saved manager credentials before every probe.
+		// Re-registering a tag already loaded by native must refresh it safely.
+		require.NoError(t, manager.AddPrivateServer("s1", parsedURL.Hostname(), port, "rootToken", C.ServerLocation{}, false))
 	})
 
 	t.Run("invite user", func(t *testing.T) {

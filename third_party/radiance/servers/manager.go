@@ -661,7 +661,12 @@ func (m *Manager) AddPrivateServer(tag, ip string, port int, accessToken string,
 	}
 	slog.Info("Adding private server from remote manager", "tag", tag, "ip", ip, "port", port, "location", loc, "is_joined", joined)
 	list := ServerList{Servers: []*Server{srv}}
-	return m.AddServers(list, false)
+	// Refreshing a saved private server is intentional: the client may call
+	// AddPrivateServer to restore its native outbound before every Smart
+	// Routing probe. Replacing the existing tag keeps this operation
+	// idempotent while ensuring the tested outbound matches the saved manager
+	// address and credentials.
+	return m.AddServers(list, true)
 }
 
 // InviteToPrivateServer invites another user to the server manager instance and returns a connection

@@ -145,47 +145,77 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
     final service = ref.read(lanternServiceProvider);
     final local = sl<LocalStorageService>().getPrivateServers();
     if (local.isEmpty) return right(AvailableServers([]));
-    // Native already owns the complete server configuration. Flutter storage
-    // may contain only a tag for servers imported from a subscription or share
-    // link, so re-registering from local metadata incorrectly makes those
-    // usable nodes look unavailable.
+    // Manual server credentials are persisted by Flutter, while native owns
+    // the outbound used by URLTest. Re-register them before probing so a
+    // server restored from Flutter storage is present in the native manager.
+    // Share-link imports only persist a tag; those already have a native
+    // outbound and are tested without a registration request.
+    final localTags = <String>{};
+    final registrationFailures = <String>{};
+    for (final item in local) {
+      final tag = item['tag'].toString();
+      localTags.add(tag);
+      final ip = (item['ip'] ?? '').toString().trim();
+      final port = (item['port'] ?? '').toString().trim();
+      final accessToken =
+          (item['access_token'] ?? item['accessToken'] ?? item['token'] ?? '')
+              .toString()
+              .trim();
+      if (ip.isEmpty || port.isEmpty || accessToken.isEmpty) continue;
+
+      final registration = await service.addServerManually(
+        ip: ip,
+        port: port,
+        accessToken: accessToken,
+        serverName: tag,
+      );
+      registration.fold((failure) {
+        registrationFailures.add(tag);
+        appLogger.warning(
+          'Smart Routing could not register $tag: ${failure.error}',
+        );
+      }, (_) {});
+    }
+
     final tested = await service.runURLTests();
     if (tested.isLeft()) {
       return tested.map((_) => AvailableServers([]));
     }
-    _latencies = Map.of(
-      tested.getOrElse((_) => {}),
-    )..removeWhere((_, delay) => delay <= 0);
+    _latencies = Map.of(tested.getOrElse((_) => {}))
+      ..removeWhere(
+        (tag, delay) =>
+            !localTags.contains(tag) ||
+            registrationFailures.contains(tag) ||
+            delay <= 0,
+      );
     appLogger.info(
       'Smart Routing URL tests returned ${_latencies.length} result(s): $_latencies',
     );
     final result = await fetchAvailableServers();
-    final merged = result.map(
-      (servers) {
-        final knownTags = servers.servers.map((server) => server.tag).toSet();
-        final measuredOnly = _latencies.keys
-            .where((tag) => !knownTags.contains(tag))
-            .map(
-              (tag) => Server(
-                tag: tag,
-                type: '',
-                isLantern: false,
-                location: GeoLocation(
-                  country: '',
-                  countryCode: '',
-                  city: tag,
-                  latitude: 0,
-                  longitude: 0,
-                ),
-                selectionHistory: SelectionHistory(
-                  lastSuccessDelayMs: _latencies[tag]!,
-                  consecutiveFailures: 0,
-                ),
+    final merged = result.map((servers) {
+      final knownTags = servers.servers.map((server) => server.tag).toSet();
+      final measuredOnly = _latencies.keys
+          .where((tag) => !knownTags.contains(tag))
+          .map(
+            (tag) => Server(
+              tag: tag,
+              type: '',
+              isLantern: false,
+              location: GeoLocation(
+                country: '',
+                countryCode: '',
+                city: tag,
+                latitude: 0,
+                longitude: 0,
               ),
-            );
-        return AvailableServers([...servers.servers, ...measuredOnly]);
-      },
-    );
+              selectionHistory: SelectionHistory(
+                lastSuccessDelayMs: _latencies[tag]!,
+                consecutiveFailures: 0,
+              ),
+            ),
+          );
+      return AvailableServers([...servers.servers, ...measuredOnly]);
+    });
     if (ref.mounted) {
       merged.fold(
         (_) {},
