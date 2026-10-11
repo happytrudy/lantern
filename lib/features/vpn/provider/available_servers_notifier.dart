@@ -151,7 +151,6 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
     // Share-link imports only persist a tag; those already have a native
     // outbound and are tested without a registration request.
     final localTags = <String>{};
-    final registrationFailures = <String>{};
     for (final item in local) {
       final tag = item['tag'].toString();
       localTags.add(tag);
@@ -170,7 +169,6 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
         serverName: tag,
       );
       registration.fold((failure) {
-        registrationFailures.add(tag);
         appLogger.warning(
           'Smart Routing could not register $tag: ${failure.error}',
         );
@@ -182,47 +180,18 @@ class AvailableServersNotifier extends _$AvailableServersNotifier {
       return tested.map((_) => AvailableServers([]));
     }
     _latencies = Map.of(tested.getOrElse((_) => {}))
-      ..removeWhere(
-        (tag, delay) =>
-            !localTags.contains(tag) ||
-            registrationFailures.contains(tag) ||
-            delay <= 0,
-      );
+      ..removeWhere((tag, delay) => !localTags.contains(tag) || delay <= 0);
     appLogger.info(
       'Smart Routing URL tests returned ${_latencies.length} result(s): $_latencies',
     );
     final result = await fetchAvailableServers();
-    final merged = result.map((servers) {
-      final knownTags = servers.servers.map((server) => server.tag).toSet();
-      final measuredOnly = _latencies.keys
-          .where((tag) => !knownTags.contains(tag))
-          .map(
-            (tag) => Server(
-              tag: tag,
-              type: '',
-              isLantern: false,
-              location: GeoLocation(
-                country: '',
-                countryCode: '',
-                city: tag,
-                latitude: 0,
-                longitude: 0,
-              ),
-              selectionHistory: SelectionHistory(
-                lastSuccessDelayMs: _latencies[tag]!,
-                consecutiveFailures: 0,
-              ),
-            ),
-          );
-      return AvailableServers([...servers.servers, ...measuredOnly]);
-    });
     if (ref.mounted) {
-      merged.fold(
+      result.fold(
         (_) {},
         (servers) => state = AsyncValue.data(_privateServersOnly(servers)),
       );
     }
-    return merged;
+    return result;
   }
 
   /// Forces a fetch of the available servers and updates the state.

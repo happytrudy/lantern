@@ -245,6 +245,7 @@ class VpnNotifier extends _$VpnNotifier {
       final result = await connectToServer(
         ServerLocationType.privateServer,
         fastest.tag,
+        restoreRegistration: false,
         // The VPN conflict check already ran at the start of startVPN.
         skipConflictCheck: true,
       );
@@ -273,6 +274,7 @@ class VpnNotifier extends _$VpnNotifier {
     ServerLocationType location,
     String tag, {
     bool skipConflictCheck = false,
+    bool restoreRegistration = true,
   }) async {
     // Check for a conflicting VPN before initiating a new connection.
     // The native side guards against false positives by returning false when
@@ -283,7 +285,7 @@ class VpnNotifier extends _$VpnNotifier {
     }
 
     state = VPNStatus.connecting;
-    if (location == ServerLocationType.privateServer) {
+    if (restoreRegistration && location == ServerLocationType.privateServer) {
       final restoreResult = await _restorePrivateServerRegistration(tag);
       if (restoreResult != null) {
         state = VPNStatus.disconnected;

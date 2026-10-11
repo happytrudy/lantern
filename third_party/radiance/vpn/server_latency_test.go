@@ -11,13 +11,16 @@ import (
 	"testing"
 	"time"
 
-	lbO "github.com/getlantern/lantern-box/option"
-	lbgroup "github.com/getlantern/lantern-box/protocol/group"
+	"crypto/tls"
 	A "github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/adapter/outbound"
+	"github.com/sagernet/sing-box/common/certificate"
 	"github.com/sagernet/sing-box/log"
+	"github.com/sagernet/sing-box/option"
 	M "github.com/sagernet/sing/common/metadata"
 	"github.com/sagernet/sing/service"
 	"github.com/stretchr/testify/require"
+	"log/slog"
 )
 
 type latencyOutbound struct {
@@ -67,22 +70,15 @@ func (m *latencyOutboundManager) Outbound(tag string) (A.Outbound, bool) {
 	return o, found
 }
 
-func TestTestServerLatenciesUsesProxyHTTPResponse(t *testing.T) {
+func TestOutboundLatenciesUsesProxyHTTPResponse(t *testing.T) {
 	fast := &latencyOutbound{tag: "fast", delay: time.Millisecond}
 	slow := &latencyOutbound{tag: "slow", delay: 80 * time.Millisecond}
 	broken := &latencyOutbound{tag: "broken"}
 	broken.fail.Store(true)
 	manager := &latencyOutboundManager{members: map[string]A.Outbound{"fast": fast, "slow": slow, "broken": broken}}
-	ctx := service.ContextWith[A.OutboundManager](t.Context(), manager)
-	group, err := lbgroup.NewMutableAutoSelect(ctx, nil, log.NewNOPFactory().Logger(), AutoSelectTag, lbO.MutableAutoSelectOutboundOptions{
-		Outbounds: []string{"fast", "slow", "broken"}, URL: "http://probe.invalid/generate_204",
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, group.(*lbgroup.MutableAutoSelect).Close()) })
-	manager.members[AutoSelectTag] = group
-	c := NewVPNClient(t.TempDir(), nil, nil)
-	c.tunnel = &tunnel{outboundMgr: manager}
-	results, err := c.TestServerLatencies(t.Context(), "", nil)
+	urls := map[string]string{"fast": "http://probe.invalid/generate_204", "slow": "http://probe.invalid/generate_204", "broken": "http://probe.invalid/generate_204"}
+	tags := []string{"fast", "slow", "broken"}
+	results, err := testOutboundLatencies(t.Context(), manager, tags, urls, slog.Default())
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 	require.Positive(t, results["fast"])
@@ -91,22 +87,31 @@ func TestTestServerLatenciesUsesProxyHTTPResponse(t *testing.T) {
 	require.NotContains(t, results, "broken")
 	require.EqualValues(t, 1, broken.requests.Load())
 	fast.fail.Store(true)
-	results, err = c.TestServerLatencies(t.Context(), "", nil)
+	results, err = testOutboundLatencies(t.Context(), manager, tags, urls, slog.Default())
 	require.NoError(t, err)
 	require.NotContains(t, results, "fast")
 	require.Contains(t, results, "slow")
 	require.EqualValues(t, 2, fast.requests.Load())
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err = c.TestServerLatencies(canceled, "", nil)
+	_, err = testOutboundLatencies(canceled, manager, tags, urls, slog.Default())
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-func TestTestServerLatenciesMissingGroup(t *testing.T) {
+func TestTestServerLatenciesWithoutAutoGroup(t *testing.T) {
+	cert, pem := probeTLSCertificate(t)
+	ctx := t.Context()
+	store, err := certificate.NewStore(ctx, log.NewNOPFactory().Logger(), option.CertificateOptions{Certificate: []string{pem}})
+	require.NoError(t, err)
+	ctx = service.ContextWith[A.CertificateStore](ctx, store)
+	o := &offlineProbeOutbound{Adapter: outbound.NewAdapter("socks", "private", []string{"tcp"}, nil), tlsConfig: &tls.Config{Certificates: []tls.Certificate{cert}}}
 	c := NewVPNClient(t.TempDir(), nil, nil)
-	c.tunnel = &tunnel{outboundMgr: &latencyOutboundManager{members: map[string]A.Outbound{}}}
-	_, err := c.TestServerLatencies(t.Context(), "", nil)
-	require.ErrorContains(t, err, "auto select group not found")
+	c.tunnel = &tunnel{ctx: ctx, outboundMgr: &latencyOutboundManager{members: map[string]A.Outbound{"private": o}}}
+	results, err := c.TestServerLatencies(t.Context(), "", []option.Outbound{{Tag: "private"}, {Tag: "missing"}})
+	require.NoError(t, err)
+	require.Positive(t, results["private"])
+	require.NotContains(t, results, "missing")
+	require.EqualValues(t, 1, o.requests.Load())
 }
 
 func TestTestServerLatenciesOfflineCanceled(t *testing.T) {

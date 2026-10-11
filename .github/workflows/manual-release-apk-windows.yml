@@ -97,6 +97,12 @@ jobs:
           make install-android-deps
           make android-release APP_VERSION="$APP_VERSION" BUILD_TYPE=production INSTALLER_NAME=lantern-installer
 
+      - name: Test Smart Routing proxy latency
+        shell: bash
+        run: |
+          go test -tags with_gvisor,with_quic,with_wireguard,with_utls,with_grpc github.com/getlantern/radiance/vpn -run 'Test(OfflineLatency|OutboundLatencies|TestServerLatencies)' -count=1
+          flutter test --no-pub test/features/vpn/provider/native_urltest_test.dart
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

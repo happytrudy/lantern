@@ -18,21 +18,6 @@ import (
 // without sharing user private IP; and fake IP dns server, which effectively resolves
 // DNS locally while allowing us to route traffic based on domains.
 func buildDNSServers() []option.DNSServerOptions {
-	local := option.DNSServerOptions{
-		Tag:  "dns_local",
-		Type: constant.DNSTypeHTTPS,
-		Options: &option.RemoteHTTPSDNSServerOptions{
-			Path: "/dns-query",
-			RemoteTLSDNSServerOptions: option.RemoteTLSDNSServerOptions{
-				RemoteDNSServerOptions: option.RemoteDNSServerOptions{
-					DNSServerAddressOptions: option.DNSServerAddressOptions{
-						Server:     localDNSIP(),
-						ServerPort: 443,
-					},
-				},
-			},
-		},
-	}
 	ipv4Prefix := badoption.Prefix(netip.MustParsePrefix("198.18.0.0/15"))
 	fakeIP := option.DNSServerOptions{
 		Tag:  "dns_fakeip",
@@ -66,8 +51,26 @@ func buildDNSServers() []option.DNSServerOptions {
 	}
 	return []option.DNSServerOptions{
 		remote,
-		local,
+		localDNSServer(),
 		fakeIP,
+	}
+}
+
+func localDNSServer() option.DNSServerOptions {
+	return option.DNSServerOptions{
+		Tag:  "dns_local",
+		Type: constant.DNSTypeHTTPS,
+		Options: &option.RemoteHTTPSDNSServerOptions{
+			Path: "/dns-query",
+			RemoteTLSDNSServerOptions: option.RemoteTLSDNSServerOptions{
+				RemoteDNSServerOptions: option.RemoteDNSServerOptions{
+					DNSServerAddressOptions: option.DNSServerAddressOptions{
+						Server:     localDNSIP(),
+						ServerPort: 443,
+					},
+				},
+			},
+		},
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -505,31 +506,21 @@ type URLTestCompleteEvent struct {
 }
 
 // TestServerLatencies returns fresh URL-test results.
-func (c *VPNClient) TestServerLatencies(ctx context.Context, basePath string, outbounds []option.Outbound) (map[string]uint16, error) {
+func (c *VPNClient) TestServerLatencies(ctx context.Context, basePath string, outbounds []option.Outbound, endpoints ...option.Endpoint) (map[string]uint16, error) {
 	ctx, cancel := context.WithTimeout(ctx, offlineURLTestTimeout)
 	defer cancel()
 	c.mu.RLock()
 	if c.tunnel == nil {
 		c.mu.RUnlock()
-		return c.RunOfflineURLTests(ctx, basePath, outbounds, nil)
+		return c.RunOfflineURLTests(ctx, basePath, outbounds, nil, endpoints...)
 	}
 	defer c.mu.RUnlock()
-	outbound, found := c.tunnel.outboundMgr.Outbound(AutoSelectTag)
-	if !found {
-		return nil, errors.New("auto select group not found")
+	if c.tunnel.ctx != nil {
+		if registry := service.RegistryFromContext(c.tunnel.ctx); registry != nil {
+			ctx = service.ContextWithRegistry(ctx, registry)
+		}
 	}
-	tester, ok := outbound.(adapter.URLTestGroup)
-	if !ok {
-		return nil, errors.New("auto select group does not support URL tests")
-	}
-	results, err := tester.URLTest(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	return results, nil
+	return testOutboundLatencies(ctx, c.tunnel.outboundMgr, latencyTags(outbounds, endpoints), nil, c.logger)
 }
 
 func (c *VPNClient) CurrentAutoSelectedServer() (string, error) {
@@ -654,7 +645,7 @@ func (c *VPNClient) AutoSelectedChangeListener(ctx context.Context) <-chan struc
 // is called while they are running. Callers should pass a context tied to the backend lifetime so
 // that closing the backend (e.g. when the tunnel comes up in the extension process) stops in-flight
 // probe dials rather than letting them route through the newly established tunnel.
-func (c *VPNClient) RunOfflineURLTests(ctx context.Context, basePath string, outbounds []option.Outbound, banditURLs map[string]string) (map[string]uint16, error) {
+func (c *VPNClient) RunOfflineURLTests(ctx context.Context, basePath string, outbounds []option.Outbound, banditURLs map[string]string, endpoints ...option.Endpoint) (map[string]uint16, error) {
 	c.mu.Lock()
 	if c.tunnel != nil {
 		c.mu.Unlock()
@@ -667,7 +658,7 @@ func (c *VPNClient) RunOfflineURLTests(ctx context.Context, basePath string, out
 		return nil, errors.New("offline tests already running")
 	}
 
-	ctx, cancel := context.WithCancel(box.Context(ctx))
+	ctx, cancel := context.WithCancel(box.Context(service.ExtendContext(ctx)))
 	defer cancel()
 	c.offlineTestCancel = cancel
 	done := make(chan struct{})
@@ -678,11 +669,8 @@ func (c *VPNClient) RunOfflineURLTests(ctx context.Context, basePath string, out
 	// Extract bandit trace context for distributed tracing
 	traceCtx, hasTrace := traces.ExtractBanditTraceContext(banditURLs)
 
-	c.logger.Info("Performing offline URL tests", "outbound_count", len(outbounds), "timeout", offlineURLTestTimeout)
-	tags := make([]string, 0, len(outbounds))
-	for _, ob := range outbounds {
-		tags = append(tags, ob.Tag)
-	}
+	c.logger.Info("Performing offline URL tests", "outbound_count", len(outbounds), "endpoint_count", len(endpoints), "timeout", offlineURLTestTimeout)
+	tags := latencyTags(outbounds, endpoints)
 	// Avoid mutating the caller's slice.
 	outbounds = append([]option.Outbound(nil), outbounds...)
 	for i := range outbounds {
@@ -691,23 +679,39 @@ func (c *VPNClient) RunOfflineURLTests(ctx context.Context, basePath string, out
 		if waterOpts, ok := outbounds[i].Options.(*lbO.WATEROutboundOptions); outbounds[i].Type == lbC.TypeWATER && ok {
 			cp := *waterOpts
 			cp.SeedEnabled = false
+			cp.Dir = filepath.Join(basePath, "water")
 			outbounds[i].Options = &cp
 		}
 	}
-	outbounds = append(outbounds, urlTestOutbound("offline-test", tags, banditURLs))
 	// CacheFile must stay disabled: enabling it holds an exclusive flock on
 	// a file in the iOS App Group container, which the OS kills across
 	// suspend with 0xdead10cc.
 	options := option.Options{
 		Log:       &option.LogOptions{Disabled: true},
 		Outbounds: outbounds,
+		Endpoints: append([]option.Endpoint(nil), endpoints...),
+		DNS: &option.DNSOptions{RawDNSOptions: option.RawDNSOptions{
+			Servers: []option.DNSServerOptions{localDNSServer()}, Final: "dns_local",
+		}},
+		Route: &option.RouteOptions{DefaultDomainResolver: &option.DomainResolveOptions{Server: "dns_local"}},
+	}
+	if c.platformIfce != nil {
+		certificates := c.platformIfce.SystemCertificates()
+		if certificates != nil {
+			options.Certificate = &option.CertificateOptions{}
+			for certificates.HasNext() {
+				options.Certificate.Certificate = append(options.Certificate.Certificate, certificates.Next())
+			}
+		}
 	}
 
-	// Standard box: the offline pre-warm needs no platform interface.
+	// Mobile network discovery must use platform APIs.
+	if c.platformIfce != nil {
+		ctx = service.ContextWith[adapter.PlatformInterface](ctx, libbox.NewPlatformInterfaceWrapper(c.platformIfce))
+	}
 	ctx = service.ContextWith[filemanager.Manager](ctx, nil)
 
-	// MutableAutoSelect probes outbounds with bounded concurrency, so the
-	// offline pre-warm needs enough total budget for multiple probe waves.
+	// The total budget includes all waves of the bounded worker pool.
 	ctx, cancel = context.WithTimeout(ctx, offlineURLTestTimeout)
 	defer cancel()
 	instance, err := sbox.New(sbox.Options{
@@ -725,18 +729,10 @@ func (c *VPNClient) RunOfflineURLTests(ctx context.Context, basePath string, out
 		return nil, fmt.Errorf("offline tests cancelled: %w", ctx.Err())
 	default:
 	}
-	if err := instance.PreStart(); err != nil {
+	if err := instance.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start sing-box instance: %w", err)
 	}
-	outbound, found := instance.Outbound().Outbound("offline-test")
-	if !found {
-		return nil, errors.New("offline-test outbound not registered")
-	}
-	tester, ok := outbound.(adapter.URLTestGroup)
-	if !ok {
-		return nil, fmt.Errorf("offline-test outbound (type %q) does not implement URLTestGroup", outbound.Type())
-	}
-	results, err := tester.URLTest(ctx)
+	results, err := testOutboundLatencies(ctx, instance.Outbound(), tags, banditURLs, c.logger)
 	if err != nil {
 		c.logger.Error("offline URL test failed", "error", err)
 		return nil, fmt.Errorf("offline URL test failed: %w", err)

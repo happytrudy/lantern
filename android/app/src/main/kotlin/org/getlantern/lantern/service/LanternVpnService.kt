@@ -6,7 +6,9 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
+import android.util.Base64
 import android.os.ParcelFileDescriptor
+import java.security.KeyStore
 import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -288,16 +290,24 @@ class LanternVpnService :
     }
 
     override fun systemCertificates(): StringIterator {
-        //return empty iterator as we are not using system certificates
-        return object : StringIterator {
-            override fun hasNext(): Boolean = false
-            override fun len(): Int {
-                return 0
+        val certificates = mutableListOf<String>()
+        try {
+            val store = KeyStore.getInstance("AndroidCAStore").apply { load(null) }
+            val aliases = store.aliases()
+            while (aliases.hasMoreElements()) {
+                val certificate = store.getCertificate(aliases.nextElement()) ?: continue
+                val encoded = Base64.encodeToString(certificate.encoded, Base64.NO_WRAP)
+                certificates.add("-----BEGIN CERTIFICATE-----\n$encoded\n-----END CERTIFICATE-----\n")
             }
-
-            override fun next(): String = ""
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Unable to read Android trusted certificates", e)
         }
-
+        val iterator = certificates.iterator()
+        return object : StringIterator {
+            override fun hasNext(): Boolean = iterator.hasNext()
+            override fun len(): Int = certificates.size
+            override fun next(): String = iterator.next()
+        }
     }
 
     private suspend fun startRadiance() {

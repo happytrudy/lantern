@@ -131,21 +131,43 @@ void main() {
     );
   });
 
-  test('unrestored node cannot displace a working restored node', () async {
-    await save('missing');
-    await save('working');
-    service.failedRegistrations.add('missing');
-    service.delays = {'missing': 1, 'working': 80};
-    await container.read(availableServersProvider.future);
-    final result = await container
-        .read(availableServersProvider.notifier)
-        .probePrivateServers();
-    expect(
-      result
-          .getOrElse((_) => throw StateError('probe failed'))
-          .fastestPrivateServer
-          ?.tag,
-      'working',
-    );
-  });
+  test(
+    'fresh proxy success survives a management registration error',
+    () async {
+      await save('missing');
+      await save('working');
+      service.failedRegistrations.add('missing');
+      service.delays = {'missing': 1, 'working': 80};
+      await container.read(availableServersProvider.future);
+      final result = await container
+          .read(availableServersProvider.notifier)
+          .probePrivateServers();
+      expect(
+        result
+            .getOrElse((_) => throw StateError('probe failed'))
+            .fastestPrivateServer
+            ?.tag,
+        'missing',
+      );
+    },
+  );
+  test(
+    'tag-only imports are tested without empty registration credentials',
+    () async {
+      await storage.savePrivateServer(tag: 'shared', isJoined: true);
+      service.delays = {'shared': 42};
+      await container.read(availableServersProvider.future);
+      final result = await container
+          .read(availableServersProvider.notifier)
+          .probePrivateServers();
+      expect(
+        result
+            .getOrElse((_) => throw StateError('probe failed'))
+            .fastestPrivateServer
+            ?.tag,
+        'shared',
+      );
+      expect(service.registered, isEmpty);
+    },
+  );
 }

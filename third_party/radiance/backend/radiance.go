@@ -1517,8 +1517,9 @@ func (r *LocalBackend) ClearTunnelCache() error {
 
 // TestServerLatencies returns only nodes that succeeded in this URL-test run.
 func (r *LocalBackend) TestServerLatencies(ctx context.Context) (map[string]uint16, error) {
-	return r.vpnClient.TestServerLatencies(ctx, settings.GetString(settings.DataPathKey),
-		servers.ServerList{Servers: r.srvManager.AllServers()}.Outbounds())
+	list := servers.ServerList{Servers: r.srvManager.AllServers()}
+	list.Servers = slices.DeleteFunc(list.Servers, func(s *servers.Server) bool { return s.IsLantern })
+	return r.vpnClient.TestServerLatencies(ctx, settings.GetString(settings.DataPathKey), list.Outbounds(), list.Endpoints()...)
 }
 
 func (r *LocalBackend) RunOfflineURLTests() error {
@@ -1529,6 +1530,7 @@ func (r *LocalBackend) RunOfflineURLTests() error {
 		settings.GetString(settings.DataPathKey),
 		servers.ServerList{Servers: svrs}.Outbounds(),
 		nil,
+		servers.ServerList{Servers: svrs}.Endpoints()...,
 	)
 	if err != nil {
 		return err
